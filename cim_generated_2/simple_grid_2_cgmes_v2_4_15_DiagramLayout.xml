@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:cim="http://iec.ch/TC57/2012/CIM-schema-cim16#"
+         xmlns:md="http://iec.ch/TC57/61970-552/ModelDescription/1#"
+         xmlns:entsoe="http://entsoe.eu/Secretariat/ProfileExtension/2#">
+
+<md:FullModel rdf:about="simple_grid_2_cgmes_v2_4_15">
+    <md:Model.created>28/04/2026 00:00:00</md:Model.created>
+    <md:Model.modelingAuthoritySet>www.example.com</md:Model.modelingAuthoritySet>
+    <md:Model.profile>DiagramLayout</md:Model.profile>
+</md:FullModel>
+
+<!-- ================================================================ -->
+<!-- DIAGRAM  (single-line diagram, top-down layout)                   -->
+<!--                                                                    -->
+<!--  x-axis: horizontal position (columns)                            -->
+<!--  y-axis: vertical position   (rows, increasing downward)          -->
+<!--                                                                    -->
+<!--    x=100, y=0    HV-Netz (slack bus)                              -->
+<!--    x=100, y=40   TR1 (110kV/20kV)                                 -->
+<!--    x=100, y=80   N1 bus bar                                        -->
+<!--    x=100, y=120  Load_1  (single load at N1, centred)             -->
+<!--    x=100, y=160  L1-2                                             -->
+<!--    x=100, y=200  N2 bus bar                                        -->
+<!--    x=60,  y=240  Load_2A                                           -->
+<!--    x=100, y=240  Load_2B                                           -->
+<!--    x=140, y=240  Load_2C                                           -->
+<!-- ================================================================ -->
+
+<cim:Diagram rdf:ID="_diag-simple-grid-0000-000000000001">
+    <cim:IdentifiedObject.name>SimpleGrid2</cim:IdentifiedObject.name>
+    <cim:Diagram.orientation rdf:resource="http://iec.ch/TC57/2010/CIM-schema-cim16#OrientationKind.negative"/>
+</cim:Diagram>
+
+<!-- HV-Netz terminal -->
+<cim:DiagramObject rdf:ID="_do-hvnetz">
+    <cim:DiagramObject.Diagram rdf:resource="#_diag-simple-grid-0000-000000000001"/>
+    <cim:DiagramObject.IdentifiedObject rdf:resource="#T-HVNetz"/>
+</cim:DiagramObject>
+<cim:DiagramObjectPoint rdf:ID="_dop-hvnetz-1">
+    <cim:DiagramObjectPoint.DiagramObject rdf:resource="#_do-hvnetz"/>
+    <cim:DiagramObjectPoint.sequenceNumber>1</cim:DiagramObjectPoint.sequenceNumber>
+    <cim:DiagramObjectPoint.xPosition>100.0</cim:DiagramObjectPoint.xPosition>
+    <cim:DiagramObjectPoint.yPosition>0.0</cim:DiagramObjectPoint.yPosition>
+</cim:DiagramObjectPoint>
+
+<!-- TR1 HV terminal -->
+<cim:DiagramObject rdf:ID="_do-tr1-0">
+    <cim:DiagramObject.Diagram rdf:resource="#_diag-simple-grid-0000-000000000001"/>
+    <cim:DiagramObject.IdentifiedObject rdf:resource="#T-TR1-0"/>
+</cim:DiagramObject>
+<cim:DiagramObjectPoint rdf:ID="_dop-tr1-0-1">
+    <cim:DiagramObjectPoint.DiagramObject rdf:resource="#_do-tr1-0"/>
+    <cim:DiagramObjectPoint.sequenceNumber>1</cim:DiagramObjectPoint.sequenceNumber>
+    <cim:DiagramObjectPoint.xPosition>100.0</cim:DiagramObjectPoint.xPosition>
+    <cim:DiagramObjectPoint.yPosition>30.0</cim:DiagramObjectPoint.yPosition>
+</cim:DiagramObjectPoint>
+<cim:DiagramObjectPoint rdf:ID="_dop-tr1-0-2">
+    <cim:DiagramObjectPoint.DiagramObject rdf:resource="#_do-tr1-0"/>
+    <cim:DiagramObjectPoint.sequenceNumber>2</cim:DiagramObjectPoint.sequenceNumber>
+    <cim:DiagramObjectPoint.xPosition>100.0</cim:DiagramObjectPoint.xPosition>
+    <cim:DiagramObjectPoint.yPosition>40.0</cim:DiagramObjectPoint.yPosition>
+</cim:DiagramObjectPoint>
+
+<!-- TR1 LV terminal -->
+<cim:DiagramObject rdf:ID="_do-tr1-1">
+    <cim:DiagramObject.Diagram rdf:resource="#_diag-simple-grid-0000-000000000001"/>
+    <cim:DiagramObject.IdentifiedObject rdf:resource="#T-TR1-1"/>
+</cim:DiagramObject>
+<cim:DiagramObjectPoint rdf:ID="_dop-tr1-1-1">
+    <cim:DiagramObjectPoint.DiagramObject rdf:resource="#_do-tr1-1"/>
+    <cim:DiagramObjectPoint.sequenceNumber>1</cim:DiagramObjectPoint.sequenceNumber>
+    <cim:DiagramObjectPoint.xPosition>100.0</cim:DiagramObjectPoint.xPosition>
+    <cim:DiagramObjectPoint.yPosition>60.0</cim:DiagramObjectPoint.yPosition>
+</cim:DiagramObjectPoint>
+<cim:DiagramObjectPoint rdf:ID="_dop-tr1-1-2">
+    <cim:DiagramObjectPoint.DiagramObject rdf:resource="#_do-tr1-1"/>
+    <cim:DiagramObjectPoint.sequenceNumber>2</cim:DiagramObjectPoint.sequenceNumber>
+    <cim:DiagramObjectPoint.xPosition>100.0</cim:DiagramObjectPoint.xPosition>
+    <cim:DiagramObjectPoint.yPosition>80.0</cim:DiagramObjectPoint.yPosition>
+</cim:DiagramObjectPoint>
+
+<!-- Load_1 terminal (single load at N1, centred) -->
+<cim:DiagramObject rdf:ID="_do-load1">
+    <cim:DiagramObject.Diagram rdf:resource="#_diag-simple-grid-0000-000000000001"/>
+    <cim:DiagramObject.IdentifiedObject rdf:resource="#T-Load1"/>
+</cim:DiagramObject>
+<cim:DiagramObjectPoint rdf:ID="_dop-load1-1">
+    <cim:DiagramObjectPoint.DiagramObject rdf:resource="#_do-load1"/>
+    <cim:DiagramObjectPoint.sequenceNumber>1</cim:DiagramObjectPoint.sequenceNumber>
+    <cim:DiagramObjectPoint.xPosition>100.0</cim:DiagramObjectPoint.xPosition>
+    <cim:DiagramObjectPoint.yPosition>120.0</cim:DiagramObjectPoint.yPosition>
+</cim:DiagramObjectPoint>
+<cim:DiagramObjectPoint rdf:ID="_dop-load1-2">
+    <cim:DiagramObjectPoint.DiagramObject rdf:resource="#_do-load1"/>
+    <cim:DiagramObjectPoint.sequenceNumber>2</cim:DiagramObjectPoint.sequenceNumber>
+    <cim:DiagramObjectPoint.xPosition>100.0</cim:DiagramObjectPoint.xPosition>
+    <cim:DiagramObjectPoint.yPosition>80.0</cim:DiagramObjectPoint.yPosition>
+</cim:DiagramObjectPoint>
+
+<!-- L1-2 send-end terminal (N1 side) -->
+<cim:DiagramObject rdf:ID="_do-l12-0">
+    <cim:DiagramObject.Diagram rdf:resource="#_diag-simple-grid-0000-000000000001"/>
+    <cim:DiagramObject.IdentifiedObject rdf:resource="#T-L12-0"/>
+</cim:DiagramObject>
+<cim:DiagramObjectPoint rdf:ID="_dop-l12-0-1">
+    <cim:DiagramObjectPoint.DiagramObject rdf:resource="#_do-l12-0"/>
+    <cim:DiagramObjectPoint.sequenceNumber>1</cim:DiagramObjectPoint.sequenceNumber>
+    <cim:DiagramObjectPoint.xPosition>100.0</cim:DiagramObjectPoint.xPosition>
+    <cim:DiagramObjectPoint.yPosition>80.0</cim:DiagramObjectPoint.yPosition>
+</cim:DiagramObjectPoint>
+<cim:DiagramObjectPoint rdf:ID="_dop-l12-0-2">
+    <cim:DiagramObjectPoint.DiagramObject rdf:resource="#_do-l12-0"/>
+    <cim:DiagramObjectPoint.sequenceNumber>2</cim:DiagramObjectPoint.sequenceNumber>
+    <cim:DiagramObjectPoint.xPosition>100.0</cim:DiagramObjectPoint.xPosition>
+    <cim:DiagramObjectPoint.yPosition>160.0</cim:DiagramObjectPoint.yPosition>
+</cim:DiagramObjectPoint>
+
+<!-- L1-2 receive-end terminal (N2 side) -->
+<cim:DiagramObject rdf:ID="_do-l12-1">
+    <cim:DiagramObject.Diagram rdf:resource="#_diag-simple-grid-0000-000000000001"/>
+    <cim:DiagramObject.IdentifiedObject rdf:resource="#T-L12-1"/>
+</cim:DiagramObject>
+<cim:DiagramObjectPoint rdf:ID="_dop-l12-1-1">
+    <cim:DiagramObjectPoint.DiagramObject rdf:resource="#_do-l12-1"/>
+    <cim:DiagramObjectPoint.sequenceNumber>1</cim:DiagramObjectPoint.sequenceNumber>
+    <cim:DiagramObjectPoint.xPosition>100.0</cim:DiagramObjectPoint.xPosition>
+    <cim:DiagramObjectPoint.yPosition>160.0</cim:DiagramObjectPoint.yPosition>
+</cim:DiagramObjectPoint>
+<cim:DiagramObjectPoint rdf:ID="_dop-l12-1-2">
+    <cim:DiagramObjectPoint.DiagramObject rdf:resource="#_do-l12-1"/>
+    <cim:DiagramObjectPoint.sequenceNumber>2</cim:DiagramObjectPoint.sequenceNumber>
+    <cim:DiagramObjectPoint.xPosition>100.0</cim:DiagramObjectPoint.xPosition>
+    <cim:DiagramObjectPoint.yPosition>200.0</cim:DiagramObjectPoint.yPosition>
+</cim:DiagramObjectPoint>
+
+<!-- Load_2A terminal (left branch at N2) -->
+<cim:DiagramObject rdf:ID="_do-load2a">
+    <cim:DiagramObject.Diagram rdf:resource="#_diag-simple-grid-0000-000000000001"/>
+    <cim:DiagramObject.IdentifiedObject rdf:resource="#T-Load2A"/>
+</cim:DiagramObject>
+<cim:DiagramObjectPoint rdf:ID="_dop-load2a-1">
+    <cim:DiagramObjectPoint.DiagramObject rdf:resource="#_do-load2a"/>
+    <cim:DiagramObjectPoint.sequenceNumber>1</cim:DiagramObjectPoint.sequenceNumber>
+    <cim:DiagramObjectPoint.xPosition>60.0</cim:DiagramObjectPoint.xPosition>
+    <cim:DiagramObjectPoint.yPosition>240.0</cim:DiagramObjectPoint.yPosition>
+</cim:DiagramObjectPoint>
+<cim:DiagramObjectPoint rdf:ID="_dop-load2a-2">
+    <cim:DiagramObjectPoint.DiagramObject rdf:resource="#_do-load2a"/>
+    <cim:DiagramObjectPoint.sequenceNumber>2</cim:DiagramObjectPoint.sequenceNumber>
+    <cim:DiagramObjectPoint.xPosition>60.0</cim:DiagramObjectPoint.xPosition>
+    <cim:DiagramObjectPoint.yPosition>200.0</cim:DiagramObjectPoint.yPosition>
+</cim:DiagramObjectPoint>
+
+<!-- Load_2B terminal (centre branch at N2) -->
+<cim:DiagramObject rdf:ID="_do-load2b">
+    <cim:DiagramObject.Diagram rdf:resource="#_diag-simple-grid-0000-000000000001"/>
+    <cim:DiagramObject.IdentifiedObject rdf:resource="#T-Load2B"/>
+</cim:DiagramObject>
+<cim:DiagramObjectPoint rdf:ID="_dop-load2b-1">
+    <cim:DiagramObjectPoint.DiagramObject rdf:resource="#_do-load2b"/>
+    <cim:DiagramObjectPoint.sequenceNumber>1</cim:DiagramObjectPoint.sequenceNumber>
+    <cim:DiagramObjectPoint.xPosition>100.0</cim:DiagramObjectPoint.xPosition>
+    <cim:DiagramObjectPoint.yPosition>240.0</cim:DiagramObjectPoint.yPosition>
+</cim:DiagramObjectPoint>
+<cim:DiagramObjectPoint rdf:ID="_dop-load2b-2">
+    <cim:DiagramObjectPoint.DiagramObject rdf:resource="#_do-load2b"/>
+    <cim:DiagramObjectPoint.sequenceNumber>2</cim:DiagramObjectPoint.sequenceNumber>
+    <cim:DiagramObjectPoint.xPosition>100.0</cim:DiagramObjectPoint.xPosition>
+    <cim:DiagramObjectPoint.yPosition>200.0</cim:DiagramObjectPoint.yPosition>
+</cim:DiagramObjectPoint>
+
+<!-- Load_2C terminal (right branch at N2) -->
+<cim:DiagramObject rdf:ID="_do-load2c">
+    <cim:DiagramObject.Diagram rdf:resource="#_diag-simple-grid-0000-000000000001"/>
+    <cim:DiagramObject.IdentifiedObject rdf:resource="#T-Load2C"/>
+</cim:DiagramObject>
+<cim:DiagramObjectPoint rdf:ID="_dop-load2c-1">
+    <cim:DiagramObjectPoint.DiagramObject rdf:resource="#_do-load2c"/>
+    <cim:DiagramObjectPoint.sequenceNumber>1</cim:DiagramObjectPoint.sequenceNumber>
+    <cim:DiagramObjectPoint.xPosition>140.0</cim:DiagramObjectPoint.xPosition>
+    <cim:DiagramObjectPoint.yPosition>240.0</cim:DiagramObjectPoint.yPosition>
+</cim:DiagramObjectPoint>
+<cim:DiagramObjectPoint rdf:ID="_dop-load2c-2">
+    <cim:DiagramObjectPoint.DiagramObject rdf:resource="#_do-load2c"/>
+    <cim:DiagramObjectPoint.sequenceNumber>2</cim:DiagramObjectPoint.sequenceNumber>
+    <cim:DiagramObjectPoint.xPosition>140.0</cim:DiagramObjectPoint.xPosition>
+    <cim:DiagramObjectPoint.yPosition>200.0</cim:DiagramObjectPoint.yPosition>
+</cim:DiagramObjectPoint>
+
+</rdf:RDF>

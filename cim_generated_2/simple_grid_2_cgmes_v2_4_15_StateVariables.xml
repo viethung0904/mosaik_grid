@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:cim="http://iec.ch/TC57/2012/CIM-schema-cim16#"
+         xmlns:md="http://iec.ch/TC57/61970-552/ModelDescription/1#"
+         xmlns:entsoe="http://entsoe.eu/Secretariat/ProfileExtension/2#">
+
+<md:FullModel rdf:about="simple_grid_2_cgmes_v2_4_15">
+    <md:Model.created>28/04/2026 00:00:00</md:Model.created>
+    <md:Model.modelingAuthoritySet>www.example.com</md:Model.modelingAuthoritySet>
+    <md:Model.profile>StateVariables</md:Model.profile>
+</md:FullModel>
+
+<!-- ================================================================ -->
+<!-- NODE VOLTAGES                                                      -->
+<!-- N0: slack bus at 110 kV, angle = 0                                -->
+<!-- N1: behind TR1, ~20 kV, slight angle shift                        -->
+<!--     Load_1: 0.5 MW + 0.25 MVAr (lighter than before → same N1)   -->
+<!-- N2: behind TR1 + L1-2                                             -->
+<!--     Total N2 load: 1.007 MW + 0.358 MVAr (higher → more drop)    -->
+<!-- ================================================================ -->
+
+<cim:SvVoltage rdf:ID="N0_sv">
+    <cim:SvVoltage.v>110.0</cim:SvVoltage.v>
+    <cim:SvVoltage.angle>0.0</cim:SvVoltage.angle>
+    <cim:SvVoltage.TopologicalNode rdf:resource="#N0"/>
+</cim:SvVoltage>
+
+<cim:SvVoltage rdf:ID="N1_sv">
+    <cim:SvVoltage.v>19.96</cim:SvVoltage.v>
+    <cim:SvVoltage.angle>-3.3</cim:SvVoltage.angle>
+    <cim:SvVoltage.TopologicalNode rdf:resource="#N1"/>
+</cim:SvVoltage>
+
+<cim:SvVoltage rdf:ID="N2_sv">
+    <cim:SvVoltage.v>19.80</cim:SvVoltage.v>
+    <cim:SvVoltage.angle>-4.2</cim:SvVoltage.angle>
+    <cim:SvVoltage.TopologicalNode rdf:resource="#N2"/>
+</cim:SvVoltage>
+
+<!-- ================================================================ -->
+<!-- LOAD POWER FLOWS  (p in MW, q in MVAr)                            -->
+<!-- ================================================================ -->
+
+<!-- Load_1: 0.5 MW + 0.25 MVAr  (same parameters as old Load_1A) -->
+<cim:SvPowerFlow rdf:ID="Load_1-sv">
+    <cim:SvPowerFlow.Terminal rdf:resource="#T-Load1"/>
+    <cim:SvPowerFlow.p>0.5</cim:SvPowerFlow.p>
+    <cim:SvPowerFlow.q>0.25</cim:SvPowerFlow.q>
+</cim:SvPowerFlow>
+
+<!-- Load_2A: 0.3 MW + 0.15 MVAr  (same parameters as old Load_1B) -->
+<cim:SvPowerFlow rdf:ID="Load_2A-sv">
+    <cim:SvPowerFlow.Terminal rdf:resource="#T-Load2A"/>
+    <cim:SvPowerFlow.p>0.3</cim:SvPowerFlow.p>
+    <cim:SvPowerFlow.q>0.15</cim:SvPowerFlow.q>
+</cim:SvPowerFlow>
+
+<!-- Load_2B: 0.432 MW + 0.108 MVAr  (same parameters as old Load_2A) -->
+<cim:SvPowerFlow rdf:ID="Load_2B-sv">
+    <cim:SvPowerFlow.Terminal rdf:resource="#T-Load2B"/>
+    <cim:SvPowerFlow.p>0.432</cim:SvPowerFlow.p>
+    <cim:SvPowerFlow.q>0.108</cim:SvPowerFlow.q>
+</cim:SvPowerFlow>
+
+<!-- Load_2C: 0.275 MW + 0.1 MVAr  (same parameters as old Load_2B) -->
+<cim:SvPowerFlow rdf:ID="Load_2C-sv">
+    <cim:SvPowerFlow.Terminal rdf:resource="#T-Load2C"/>
+    <cim:SvPowerFlow.p>0.275</cim:SvPowerFlow.p>
+    <cim:SvPowerFlow.q>0.1</cim:SvPowerFlow.q>
+</cim:SvPowerFlow>
+
+<!-- ================================================================ -->
+<!-- TOPOLOGICAL NODE BACK-REFERENCES                                   -->
+<!-- ================================================================ -->
+
+<cim:TopologicalNode rdf:about="#N0">
+    <cim:TopologicalNode.SvVoltage rdf:resource="#N0_sv"/>
+</cim:TopologicalNode>
+
+<cim:TopologicalNode rdf:about="#N1">
+    <cim:TopologicalNode.SvVoltage rdf:resource="#N1_sv"/>
+</cim:TopologicalNode>
+
+<cim:TopologicalNode rdf:about="#N2">
+    <cim:TopologicalNode.SvVoltage rdf:resource="#N2_sv"/>
+</cim:TopologicalNode>
+
+<!-- ================================================================ -->
+<!-- TERMINAL BACK-REFERENCES                                           -->
+<!-- ================================================================ -->
+
+<cim:Terminal rdf:about="#T-Load1">
+    <cim:Terminal.SvPowerFlow rdf:resource="#Load_1-sv"/>
+</cim:Terminal>
+
+<cim:Terminal rdf:about="#T-Load2A">
+    <cim:Terminal.SvPowerFlow rdf:resource="#Load_2A-sv"/>
+</cim:Terminal>
+
+<cim:Terminal rdf:about="#T-Load2B">
+    <cim:Terminal.SvPowerFlow rdf:resource="#Load_2B-sv"/>
+</cim:Terminal>
+
+<cim:Terminal rdf:about="#T-Load2C">
+    <cim:Terminal.SvPowerFlow rdf:resource="#Load_2C-sv"/>
+</cim:Terminal>
+
+</rdf:RDF>

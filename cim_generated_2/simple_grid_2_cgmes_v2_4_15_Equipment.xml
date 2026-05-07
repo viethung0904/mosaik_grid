@@ -1,0 +1,336 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:cim="http://iec.ch/TC57/2012/CIM-schema-cim16#"
+         xmlns:md="http://iec.ch/TC57/61970-552/ModelDescription/1#"
+         xmlns:entsoe="http://entsoe.eu/Secretariat/ProfileExtension/2#">
+
+<md:FullModel rdf:about="simple_grid_2_cgmes_v2_4_15">
+    <md:Model.created>28/04/2026 00:00:00</md:Model.created>
+    <md:Model.modelingAuthoritySet>www.example.com</md:Model.modelingAuthoritySet>
+    <md:Model.profile>Equipment</md:Model.profile>
+</md:FullModel>
+
+<!-- ================================================================ -->
+<!-- Topology:                                                          -->
+<!--   110 kV slack (HV-Netz)                                          -->
+<!--     └── TR1 (110/20 kV)                                           -->
+<!--           └── N1 (20 kV)                                          -->
+<!--                 └── Load_1   (0.5 MW + 0.25 MVAr)                 -->
+<!--                 └── L1-2                                          -->
+<!--                       └── N2 (20 kV)                              -->
+<!--                             └── Load_2A (0.3 MW + 0.15 MVAr)     -->
+<!--                             └── Load_2B (0.432 MW + 0.108 MVAr)  -->
+<!--                             └── Load_2C (0.275 MW + 0.1 MVAr)    -->
+<!-- ================================================================ -->
+
+<!-- ================================================================ -->
+<!-- BASE VOLTAGES                                                      -->
+<!-- ================================================================ -->
+
+<cim:BaseVoltage rdf:ID="_bv-020kv-0000-0000-0000-000000000001">
+    <cim:BaseVoltage.nominalVoltage>20.0</cim:BaseVoltage.nominalVoltage>
+    <cim:BaseVoltage.VoltageLevel rdf:resource="#_vl-n1-020-0000-0000-000000000001"/>
+    <cim:BaseVoltage.VoltageLevel rdf:resource="#_vl-n2-020-0000-0000-000000000001"/>
+</cim:BaseVoltage>
+
+<cim:BaseVoltage rdf:ID="_bv-110kv-0000-0000-0000-000000000002">
+    <cim:BaseVoltage.nominalVoltage>110.0</cim:BaseVoltage.nominalVoltage>
+    <cim:BaseVoltage.VoltageLevel rdf:resource="#_vl-n0-110-0000-0000-000000000001"/>
+</cim:BaseVoltage>
+
+<!-- ================================================================ -->
+<!-- VOLTAGE LEVELS                                                     -->
+<!-- ================================================================ -->
+
+<cim:VoltageLevel rdf:ID="_vl-n0-110-0000-0000-000000000001">
+    <cim:IdentifiedObject.name>VL_N0_110kV</cim:IdentifiedObject.name>
+    <cim:VoltageLevel.BaseVoltage rdf:resource="#_bv-110kv-0000-0000-0000-000000000002"/>
+    <cim:VoltageLevel.Substation rdf:resource="#_sub-n0-000-0000-0000-000000000001"/>
+</cim:VoltageLevel>
+
+<cim:VoltageLevel rdf:ID="_vl-n1-020-0000-0000-000000000001">
+    <cim:IdentifiedObject.name>VL_N1_20kV</cim:IdentifiedObject.name>
+    <cim:VoltageLevel.BaseVoltage rdf:resource="#_bv-020kv-0000-0000-0000-000000000001"/>
+    <cim:VoltageLevel.Substation rdf:resource="#_sub-n1-000-0000-0000-000000000001"/>
+</cim:VoltageLevel>
+
+<cim:VoltageLevel rdf:ID="_vl-n2-020-0000-0000-000000000001">
+    <cim:IdentifiedObject.name>VL_N2_20kV</cim:IdentifiedObject.name>
+    <cim:VoltageLevel.BaseVoltage rdf:resource="#_bv-020kv-0000-0000-0000-000000000001"/>
+    <cim:VoltageLevel.Substation rdf:resource="#_sub-n2-000-0000-0000-000000000001"/>
+</cim:VoltageLevel>
+
+<!-- ================================================================ -->
+<!-- SUBSTATIONS                                                        -->
+<!-- ================================================================ -->
+
+<cim:Substation rdf:ID="_sub-n0-000-0000-0000-000000000001">
+    <cim:IdentifiedObject.name>N0</cim:IdentifiedObject.name>
+    <cim:Substation.Region rdf:resource="#_sgr-zone1-000-0000-0000-000000000001"/>
+</cim:Substation>
+
+<cim:Substation rdf:ID="_sub-n1-000-0000-0000-000000000001">
+    <cim:IdentifiedObject.name>N1</cim:IdentifiedObject.name>
+    <cim:Substation.Region rdf:resource="#_sgr-zone1-000-0000-0000-000000000001"/>
+</cim:Substation>
+
+<cim:Substation rdf:ID="_sub-n2-000-0000-0000-000000000001">
+    <cim:IdentifiedObject.name>N2</cim:IdentifiedObject.name>
+    <cim:Substation.Region rdf:resource="#_sgr-zone1-000-0000-0000-000000000001"/>
+</cim:Substation>
+
+<!-- ================================================================ -->
+<!-- GEOGRAPHICAL REGIONS                                               -->
+<!-- ================================================================ -->
+
+<cim:GeographicalRegion rdf:ID="_gr-area1-00-0000-0000-000000000001">
+    <cim:IdentifiedObject.name>Area 1</cim:IdentifiedObject.name>
+</cim:GeographicalRegion>
+
+<cim:SubGeographicalRegion rdf:ID="_sgr-zone1-000-0000-0000-000000000001">
+    <cim:IdentifiedObject.name>Zone 1</cim:IdentifiedObject.name>
+    <cim:SubGeographicalRegion.Region rdf:resource="#_gr-area1-00-0000-0000-000000000001"/>
+</cim:SubGeographicalRegion>
+
+<!-- ================================================================ -->
+<!-- OPERATIONAL LIMIT TYPES                                            -->
+<!-- ================================================================ -->
+
+<cim:OperationalLimitType rdf:ID="_patl-0000-0000-0000-000000000001">
+    <cim:IdentifiedObject.name>PATL</cim:IdentifiedObject.name>
+    <cim:OperationalLimitType.acceptableDuration>45000</cim:OperationalLimitType.acceptableDuration>
+    <cim:OperationalLimitType.direction rdf:resource="http://iec.ch/TC57/2012/CIM-schema-cim16#OperationalLimitDirectionKind.absoluteValue"/>
+</cim:OperationalLimitType>
+
+<cim:OperationalLimitType rdf:ID="_tatl-0000-0000-0000-000000000001">
+    <cim:IdentifiedObject.name>TATL</cim:IdentifiedObject.name>
+    <cim:OperationalLimitType.acceptableDuration>60</cim:OperationalLimitType.acceptableDuration>
+    <cim:OperationalLimitType.direction rdf:resource="http://iec.ch/TC57/2012/CIM-schema-cim16#OperationalLimitDirectionKind.absoluteValue"/>
+</cim:OperationalLimitType>
+
+<!-- ================================================================ -->
+<!-- EXTERNAL NETWORK INJECTION (110 kV SLACK BUS)                     -->
+<!-- ================================================================ -->
+
+<cim:ExternalNetworkInjection rdf:ID="HV-Netz">
+    <cim:IdentifiedObject.name>HV-Netz</cim:IdentifiedObject.name>
+    <cim:Equipment.EquipmentContainer rdf:resource="#_vl-n0-110-0000-0000-000000000001"/>
+    <cim:ExternalNetworkInjection.ikSecond>True</cim:ExternalNetworkInjection.ikSecond>
+    <cim:ExternalNetworkInjection.voltageFactor>1.0</cim:ExternalNetworkInjection.voltageFactor>
+</cim:ExternalNetworkInjection>
+
+<cim:Terminal rdf:ID="T-HVNetz">
+    <cim:IdentifiedObject.name>HV-Netz_0</cim:IdentifiedObject.name>
+    <cim:ACDCTerminal.sequenceNumber>1</cim:ACDCTerminal.sequenceNumber>
+    <cim:Terminal.ConductingEquipment rdf:resource="#HV-Netz"/>
+</cim:Terminal>
+
+<!-- ================================================================ -->
+<!-- POWER TRANSFORMER TR1  (110 kV / 20 kV, 40 MVA, YNd5)            -->
+<!-- Parameters identical to TR1 in the original CIGRE MV model        -->
+<!-- ================================================================ -->
+
+<cim:PowerTransformer rdf:ID="TR1">
+    <cim:IdentifiedObject.name>TR1</cim:IdentifiedObject.name>
+    <cim:Equipment.EquipmentContainer rdf:resource="#_sub-n0-000-0000-0000-000000000001"/>
+    <cim:Equipment.OperationalLimitSet rdf:resource="#_ols-tr1-0-0000-0000-000000000001"/>
+    <cim:Equipment.OperationalLimitSet rdf:resource="#_ols-tr1-1-0000-0000-000000000001"/>
+    <cim:PowerTransformer.PowerTransformerEnd rdf:resource="#_tr1-end1-0000-0000-0000-000000000001"/>
+    <cim:PowerTransformer.PowerTransformerEnd rdf:resource="#_tr1-end2-0000-0000-0000-000000000002"/>
+</cim:PowerTransformer>
+
+<!-- TR1 HV terminal (End 1 – 110 kV side, bus N0) -->
+<cim:Terminal rdf:ID="T-TR1-0">
+    <cim:IdentifiedObject.name>TR1_0</cim:IdentifiedObject.name>
+    <cim:ACDCTerminal.sequenceNumber>1</cim:ACDCTerminal.sequenceNumber>
+    <cim:ACDCTerminal.OperationalLimitSet rdf:resource="#_ols-tr1-0-0000-0000-000000000001"/>
+    <cim:Terminal.ConductingEquipment rdf:resource="#TR1"/>
+</cim:Terminal>
+
+<cim:PowerTransformerEnd rdf:ID="_tr1-end1-0000-0000-0000-000000000001">
+    <cim:IdentifiedObject.name>TR1</cim:IdentifiedObject.name>
+    <cim:TransformerEnd.BaseVoltage rdf:resource="#_bv-110kv-0000-0000-0000-000000000002"/>
+    <cim:TransformerEnd.Terminal rdf:resource="#T-TR1-0"/>
+    <cim:TransformerEnd.endNumber>1</cim:TransformerEnd.endNumber>
+    <cim:TransformerEnd.grounded>True</cim:TransformerEnd.grounded>
+    <cim:PowerTransformerEnd.PowerTransformer rdf:resource="#TR1"/>
+    <cim:PowerTransformerEnd.b>-1.9835e-06</cim:PowerTransformerEnd.b>
+    <cim:PowerTransformerEnd.connectionKind rdf:resource="http://iec.ch/TC57/2012/CIM-schema-cim16#WindingConnection.Y"/>
+    <cim:PowerTransformerEnd.ratedS>40.0</cim:PowerTransformerEnd.ratedS>
+    <cim:PowerTransformerEnd.ratedU>110.0</cim:PowerTransformerEnd.ratedU>
+    <cim:PowerTransformerEnd.r>1.90575</cim:PowerTransformerEnd.r>
+    <cim:PowerTransformerEnd.x>36.371106</cim:PowerTransformerEnd.x>
+    <cim:PowerTransformerEnd.r0>1.90575</cim:PowerTransformerEnd.r0>
+    <cim:PowerTransformerEnd.x0>34.432301</cim:PowerTransformerEnd.x0>
+</cim:PowerTransformerEnd>
+
+<cim:OperationalLimitSet rdf:ID="_ols-tr1-0-0000-0000-000000000001">
+    <cim:IdentifiedObject.name>Ratings</cim:IdentifiedObject.name>
+    <cim:OperationalLimitSet.Terminal rdf:resource="#T-TR1-0"/>
+    <cim:OperationalLimitSet.Equipment rdf:resource="#TR1"/>
+</cim:OperationalLimitSet>
+<cim:CurrentLimit rdf:ID="_cl-tr1-0-normal">
+    <cim:IdentifiedObject.name>Normal</cim:IdentifiedObject.name>
+    <cim:OperationalLimit.OperationalLimitSet rdf:resource="#_ols-tr1-0-0000-0000-000000000001"/>
+    <cim:OperationalLimit.OperationalLimitType rdf:resource="#_patl-0000-0000-0000-000000000001"/>
+</cim:CurrentLimit>
+<cim:CurrentLimit rdf:ID="_cl-tr1-0-shortterm">
+    <cim:IdentifiedObject.name>ShortTerm</cim:IdentifiedObject.name>
+    <cim:OperationalLimit.OperationalLimitSet rdf:resource="#_ols-tr1-0-0000-0000-000000000001"/>
+</cim:CurrentLimit>
+<cim:CurrentLimit rdf:ID="_cl-tr1-0-emergency">
+    <cim:IdentifiedObject.name>Emergency</cim:IdentifiedObject.name>
+    <cim:OperationalLimit.OperationalLimitSet rdf:resource="#_ols-tr1-0-0000-0000-000000000001"/>
+    <cim:OperationalLimit.OperationalLimitType rdf:resource="#_tatl-0000-0000-0000-000000000001"/>
+</cim:CurrentLimit>
+
+<!-- TR1 LV terminal (End 2 – 20 kV side, bus N1) -->
+<cim:Terminal rdf:ID="T-TR1-1">
+    <cim:IdentifiedObject.name>TR1_1</cim:IdentifiedObject.name>
+    <cim:ACDCTerminal.sequenceNumber>2</cim:ACDCTerminal.sequenceNumber>
+    <cim:ACDCTerminal.OperationalLimitSet rdf:resource="#_ols-tr1-1-0000-0000-000000000001"/>
+    <cim:Terminal.ConductingEquipment rdf:resource="#TR1"/>
+</cim:Terminal>
+
+<cim:PowerTransformerEnd rdf:ID="_tr1-end2-0000-0000-0000-000000000002">
+    <cim:IdentifiedObject.name>TR1</cim:IdentifiedObject.name>
+    <cim:TransformerEnd.BaseVoltage rdf:resource="#_bv-020kv-0000-0000-0000-000000000001"/>
+    <cim:TransformerEnd.Terminal rdf:resource="#T-TR1-1"/>
+    <cim:TransformerEnd.endNumber>2</cim:TransformerEnd.endNumber>
+    <cim:TransformerEnd.grounded>True</cim:TransformerEnd.grounded>
+    <cim:PowerTransformerEnd.PowerTransformer rdf:resource="#TR1"/>
+    <cim:PowerTransformerEnd.connectionKind rdf:resource="http://iec.ch/TC57/2012/CIM-schema-cim16#WindingConnection.D"/>
+    <cim:PowerTransformerEnd.ratedS>40.0</cim:PowerTransformerEnd.ratedS>
+    <cim:PowerTransformerEnd.ratedU>20.0</cim:PowerTransformerEnd.ratedU>
+    <cim:PowerTransformerEnd.phaseAngleClock>5</cim:PowerTransformerEnd.phaseAngleClock>
+</cim:PowerTransformerEnd>
+
+<cim:OperationalLimitSet rdf:ID="_ols-tr1-1-0000-0000-000000000001">
+    <cim:IdentifiedObject.name>Ratings</cim:IdentifiedObject.name>
+    <cim:OperationalLimitSet.Terminal rdf:resource="#T-TR1-1"/>
+    <cim:OperationalLimitSet.Equipment rdf:resource="#TR1"/>
+</cim:OperationalLimitSet>
+<cim:CurrentLimit rdf:ID="_cl-tr1-1-normal">
+    <cim:IdentifiedObject.name>Normal</cim:IdentifiedObject.name>
+    <cim:OperationalLimit.OperationalLimitSet rdf:resource="#_ols-tr1-1-0000-0000-000000000001"/>
+    <cim:OperationalLimit.OperationalLimitType rdf:resource="#_patl-0000-0000-0000-000000000001"/>
+</cim:CurrentLimit>
+<cim:CurrentLimit rdf:ID="_cl-tr1-1-shortterm">
+    <cim:IdentifiedObject.name>ShortTerm</cim:IdentifiedObject.name>
+    <cim:OperationalLimit.OperationalLimitSet rdf:resource="#_ols-tr1-1-0000-0000-000000000001"/>
+</cim:CurrentLimit>
+<cim:CurrentLimit rdf:ID="_cl-tr1-1-emergency">
+    <cim:IdentifiedObject.name>Emergency</cim:IdentifiedObject.name>
+    <cim:OperationalLimit.OperationalLimitSet rdf:resource="#_ols-tr1-1-0000-0000-000000000001"/>
+    <cim:OperationalLimit.OperationalLimitType rdf:resource="#_tatl-0000-0000-0000-000000000001"/>
+</cim:CurrentLimit>
+
+<!-- ================================================================ -->
+<!-- LOAD AT SUBSTATION N1                                              -->
+<!-- Load_1: 0.5 MW + 0.25 MVAr  (same parameters as old Load_1A)     -->
+<!-- ================================================================ -->
+
+<cim:EnergyConsumer rdf:ID="Load_1">
+    <cim:IdentifiedObject.name>Load_1</cim:IdentifiedObject.name>
+    <cim:Equipment.EquipmentContainer rdf:resource="#_vl-n1-020-0000-0000-000000000001"/>
+</cim:EnergyConsumer>
+<cim:Terminal rdf:ID="T-Load1">
+    <cim:IdentifiedObject.name>Load_1_0</cim:IdentifiedObject.name>
+    <cim:ACDCTerminal.sequenceNumber>1</cim:ACDCTerminal.sequenceNumber>
+    <cim:Terminal.ConductingEquipment rdf:resource="#Load_1"/>
+</cim:Terminal>
+
+<!-- ================================================================ -->
+<!-- AC LINE SEGMENT L1-2                                               -->
+<!-- Parameters identical to L1-2 in the original CIGRE MV model       -->
+<!--   length=2.82 km, r=1.63278 Ω, x=1.03494 Ω,                      -->
+<!--   bch=1.407573e-4 S, Ilim=320 A                                   -->
+<!-- ================================================================ -->
+
+<cim:ACLineSegment rdf:ID="L1-2">
+    <cim:IdentifiedObject.name>L1-2</cim:IdentifiedObject.name>
+    <cim:Equipment.OperationalLimitSet rdf:resource="#_ols-l12-00-0000-0000-000000000001"/>
+    <cim:ConductingEquipment.BaseVoltage rdf:resource="#_bv-020kv-0000-0000-0000-000000000001"/>
+    <cim:Conductor.length>2.82</cim:Conductor.length>
+    <cim:ACLineSegment.bch>0.0001407573</cim:ACLineSegment.bch>
+    <cim:ACLineSegment.r>1.63278</cim:ACLineSegment.r>
+    <cim:ACLineSegment.x>1.03494</cim:ACLineSegment.x>
+    <cim:ACLineSegment.b0ch>0.000225026</cim:ACLineSegment.b0ch>
+    <cim:ACLineSegment.r0>2.82</cim:ACLineSegment.r0>
+    <cim:ACLineSegment.shortCircuitEndTemperature>250.0</cim:ACLineSegment.shortCircuitEndTemperature>
+    <cim:ACLineSegment.x0>2.82</cim:ACLineSegment.x0>
+</cim:ACLineSegment>
+
+<cim:Terminal rdf:ID="T-L12-0">
+    <cim:IdentifiedObject.name>L1-2_0</cim:IdentifiedObject.name>
+    <cim:ACDCTerminal.sequenceNumber>1</cim:ACDCTerminal.sequenceNumber>
+    <cim:ACDCTerminal.OperationalLimitSet rdf:resource="#_ols-l12-00-0000-0000-000000000001"/>
+    <cim:Terminal.ConductingEquipment rdf:resource="#L1-2"/>
+</cim:Terminal>
+
+<cim:Terminal rdf:ID="T-L12-1">
+    <cim:IdentifiedObject.name>L1-2_1</cim:IdentifiedObject.name>
+    <cim:ACDCTerminal.sequenceNumber>2</cim:ACDCTerminal.sequenceNumber>
+    <cim:Terminal.ConductingEquipment rdf:resource="#L1-2"/>
+</cim:Terminal>
+
+<cim:OperationalLimitSet rdf:ID="_ols-l12-00-0000-0000-000000000001">
+    <cim:IdentifiedObject.name>Ratings</cim:IdentifiedObject.name>
+    <cim:OperationalLimitSet.Terminal rdf:resource="#T-L12-0"/>
+    <cim:OperationalLimitSet.Equipment rdf:resource="#L1-2"/>
+</cim:OperationalLimitSet>
+<cim:CurrentLimit rdf:ID="_cl-l12-normal">
+    <cim:IdentifiedObject.name>Normal</cim:IdentifiedObject.name>
+    <cim:OperationalLimit.OperationalLimitSet rdf:resource="#_ols-l12-00-0000-0000-000000000001"/>
+    <cim:OperationalLimit.OperationalLimitType rdf:resource="#_patl-0000-0000-0000-000000000001"/>
+    <cim:CurrentLimit.value>320.0</cim:CurrentLimit.value>
+</cim:CurrentLimit>
+<cim:CurrentLimit rdf:ID="_cl-l12-shortterm">
+    <cim:IdentifiedObject.name>ShortTerm</cim:IdentifiedObject.name>
+    <cim:OperationalLimit.OperationalLimitSet rdf:resource="#_ols-l12-00-0000-0000-000000000001"/>
+</cim:CurrentLimit>
+<cim:CurrentLimit rdf:ID="_cl-l12-emergency">
+    <cim:IdentifiedObject.name>Emergency</cim:IdentifiedObject.name>
+    <cim:OperationalLimit.OperationalLimitSet rdf:resource="#_ols-l12-00-0000-0000-000000000001"/>
+    <cim:OperationalLimit.OperationalLimitType rdf:resource="#_tatl-0000-0000-0000-000000000001"/>
+    <cim:CurrentLimit.value>320.0</cim:CurrentLimit.value>
+</cim:CurrentLimit>
+
+<!-- ================================================================ -->
+<!-- LOADS AT SUBSTATION N2                                             -->
+<!-- Load_2A: 0.3 MW  + 0.15 MVAr  (same parameters as old Load_1B)   -->
+<!-- Load_2B: 0.432 MW + 0.108 MVAr (same parameters as old Load_2A)  -->
+<!-- Load_2C: 0.275 MW + 0.1 MVAr   (same parameters as old Load_2B)  -->
+<!-- ================================================================ -->
+
+<cim:EnergyConsumer rdf:ID="Load_2A">
+    <cim:IdentifiedObject.name>Load_2A</cim:IdentifiedObject.name>
+    <cim:Equipment.EquipmentContainer rdf:resource="#_vl-n2-020-0000-0000-000000000001"/>
+</cim:EnergyConsumer>
+<cim:Terminal rdf:ID="T-Load2A">
+    <cim:IdentifiedObject.name>Load_2A_0</cim:IdentifiedObject.name>
+    <cim:ACDCTerminal.sequenceNumber>1</cim:ACDCTerminal.sequenceNumber>
+    <cim:Terminal.ConductingEquipment rdf:resource="#Load_2A"/>
+</cim:Terminal>
+
+<cim:EnergyConsumer rdf:ID="Load_2B">
+    <cim:IdentifiedObject.name>Load_2B</cim:IdentifiedObject.name>
+    <cim:Equipment.EquipmentContainer rdf:resource="#_vl-n2-020-0000-0000-000000000001"/>
+</cim:EnergyConsumer>
+<cim:Terminal rdf:ID="T-Load2B">
+    <cim:IdentifiedObject.name>Load_2B_0</cim:IdentifiedObject.name>
+    <cim:ACDCTerminal.sequenceNumber>1</cim:ACDCTerminal.sequenceNumber>
+    <cim:Terminal.ConductingEquipment rdf:resource="#Load_2B"/>
+</cim:Terminal>
+
+<cim:EnergyConsumer rdf:ID="Load_2C">
+    <cim:IdentifiedObject.name>Load_2C</cim:IdentifiedObject.name>
+    <cim:Equipment.EquipmentContainer rdf:resource="#_vl-n2-020-0000-0000-000000000001"/>
+</cim:EnergyConsumer>
+<cim:Terminal rdf:ID="T-Load2C">
+    <cim:IdentifiedObject.name>Load_2C_0</cim:IdentifiedObject.name>
+    <cim:ACDCTerminal.sequenceNumber>1</cim:ACDCTerminal.sequenceNumber>
+    <cim:Terminal.ConductingEquipment rdf:resource="#Load_2C"/>
+</cim:Terminal>
+
+</rdf:RDF>

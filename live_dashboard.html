@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Grid Simulation — Live Dashboard</title>
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: "Segoe UI", sans-serif;
+  background: #0d0d1a;
+  color: #e0e0e0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Header ── */
+#header {
+  background: #16213e;
+  border-bottom: 1px solid #2d4a7a;
+  padding: 6px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+#header h1 { font-size: 14px; color: #7eb8f7; white-space: nowrap; }
+
+#status-badge {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px; font-weight: bold;
+  background: #1a2a1a; color: #2ecc71;
+  border: 1px solid #2ecc71;
+  white-space: nowrap;
+}
+#status-badge.done { background: #1a1a2a; color: #888; border-color: #444; }
+#status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #2ecc71;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+#status-badge.done #status-dot { background: #555; animation: none; }
+@keyframes pulse {
+  0%,100% { opacity: 1; } 50% { opacity: 0.3; }
+}
+
+#progress-wrap {
+  flex: 1; min-width: 80px; max-width: 220px;
+  background: #1a1a30;
+  border-radius: 6px; overflow: hidden; height: 16px;
+  border: 1px solid #2d4a7a;
+}
+#progress-bar {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, #2d4a7a, #4C9BE8);
+  transition: width 0.4s;
+}
+#progress-label { font-size: 10px; color: #888; white-space: nowrap; }
+
+/* ── Main layout ── */
+#main { display: flex; flex: 1; overflow: hidden; min-height: 0; }
+
+/* ── Graph pane ── */
+#graph-pane { flex: 1; position: relative; min-width: 0; }
+#mynetwork  { width: 100%; height: 100%; background: #0d0d1a; }
+
+/* ── Divider ── */
+#divider {
+  width: 5px; background: #1a2a4a;
+  cursor: col-resize; flex-shrink: 0;
+  transition: background 0.15s;
+}
+#divider:hover { background: #3a5a8a; }
+
+/* ── Chart pane ── */
+#chart-pane {
+  width: 440px; min-width: 440px;
+  background: #12122a;
+  border-left: 1px solid #2d4a7a;
+  display: flex; flex-direction: column;
+}
+#chart-header {
+  padding: 8px 14px;
+  border-bottom: 1px solid #2d4a7a;
+  background: #16213e;
+  flex-shrink: 0;
+}
+#chart-title    { font-size: 13px; font-weight: bold; color: #7eb8f7; margin-bottom: 2px; }
+#chart-subtitle { font-size: 11px; color: #888; }
+#chart-body          { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.chart-sub-pane      { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.chart-sub-label     { font-size: 10px; font-weight: bold; color: #7eb8f7;
+                        text-transform: uppercase; letter-spacing: 0.07em;
+                        padding: 3px 10px; background: #0e0e1f;
+                        border-bottom: 1px solid #1a2a4a; flex-shrink: 0; }
+#chart-plotly        { width: 100%; flex: 1; min-height: 0; display: none; }
+#chart-plotly-current{ width: 100%; flex: 1; min-height: 0; display: none; }
+.chart-sub-ph        { flex: 1; display: flex; align-items: center; justify-content: center;
+                        color: #444; font-size: 11px; text-align: center;
+                        padding: 12px; line-height: 1.6; }
+#chart-hdivider      { height: 5px; background: #1a2a4a; cursor: row-resize; flex-shrink: 0;
+                        transition: background 0.15s; }
+#chart-hdivider:hover { background: #3a5a8a; }
+
+/* ── Legend ── */
+#legend {
+  position: absolute; top: 12px; left: 12px; z-index: 9999;
+  background: rgba(13,13,26,0.93);
+  border: 1px solid #2d4a7a;
+  border-radius: 8px; padding: 10px 14px;
+  color: #e0e0e0; font-size: 11px; line-height: 1.9;
+  pointer-events: none;
+}
+#legend b { font-size: 12px; color: #7eb8f7; }
+
+/* ── vis tooltip ── */
+.vis-tooltip {
+  white-space: pre-line !important;
+  font-family: monospace !important;
+  font-size: 11px !important;
+  background: #1e1e2e !important;
+  color: #e0e0e0 !important;
+  border: 1px solid #555 !important;
+  border-radius: 6px !important;
+  padding: 8px 10px !important;
+  max-width: 380px !important;
+}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>&#9889; Grid Simulation — Live Dashboard</h1>
+  <div id="status-badge">
+    <div id="status-dot"></div>
+    <span id="status-text">LIVE</span>
+  </div>
+  <div id="progress-wrap">
+    <div id="progress-bar"></div>
+  </div>
+  <span id="progress-label">step 0 / ?</span>
+  <span id="data-keys" style="font-size:10px;color:#888;margin-left:auto;">⏳ waiting for data</span>
+</div>
+
+<div id="main">
+  <div id="graph-pane">
+    <div id="mynetwork"></div>
+    <div id="legend">
+      <b>CIGRE MV Network</b><br>
+      <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#4C9BE8;vertical-align:middle;margin-right:6px;"></span>Substation (V, &#952;)<br>
+      <span style="display:inline-block;width:12px;height:12px;background:#2ECC71;vertical-align:middle;margin-right:6px;"></span>Transformer (V<sub style="font-size:9px">LV</sub>)<br>
+      <span style="display:inline-block;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:12px solid #E8A838;vertical-align:middle;margin-right:6px;"></span>Load<br>
+      <span style="display:inline-block;width:36px;height:2px;background:#F4A261;vertical-align:middle;margin-right:6px;"></span>Line / TR (P, Q loss)<br>
+      <span style="display:inline-block;width:36px;height:0;border-top:2px dashed #888;vertical-align:middle;margin-right:6px;"></span>Load connection<br>
+      <span style="color:#555;font-size:10px;">Click to pin chart</span>
+    </div>
+  </div>
+
+  <div id="divider"></div>
+
+  <div id="chart-pane">
+    <div id="chart-header">
+      <div id="chart-title">Simulation Results</div>
+      <div id="chart-subtitle">Hover or click a node / edge in the network</div>
+    </div>
+    <div id="chart-body">
+      <div class="chart-sub-pane" id="chart-power-pane">
+        <div class="chart-sub-label" id="label-power">&#9889; Branch Power &mdash; P &amp; Q Loss</div>
+        <div id="chart-plotly"></div>
+        <div class="chart-sub-ph" id="chart-power-ph">
+          Hover or click a <span style="color:#F4A261;margin:0 3px;">line edge</span>
+          to view power loss
+        </div>
+      </div>
+      <div id="chart-hdivider"></div>
+      <div class="chart-sub-pane" id="chart-current-pane">
+        <div class="chart-sub-label" id="label-current">&#126; Branch Current &mdash; I from (kA)</div>
+        <div id="chart-plotly-current"></div>
+        <div class="chart-sub-ph" id="chart-current-ph">
+          Hover or click a <span style="color:#9B59B6;margin:0 3px;">line edge</span>
+          to view branch current
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// Network graph (embedded from graph.html)
+// ============================================================
+var nodes   = new vis.DataSet([{"borderWidth": 2, "color": "#E8A838", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:0", "label": "LDBUS_3   69.0", "shape": "triangle", "size": 16, "title": "[Load]\nname : LDBUS_3   69.0\np_mw : 94.2\nq_mvar : 19.0\nterminal_id : E-707"}, {"borderWidth": 2, "color": "#E8A838", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:1", "label": "LDBUS_4   69.0", "shape": "triangle", "size": 16, "title": "[Load]\nname : LDBUS_4   69.0\np_mw : 47.8\nq_mvar : 4.0\nterminal_id : E-705"}, {"borderWidth": 2, "color": "#E8A838", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:14", "label": "LDBUS_11  13.8", "shape": "triangle", "size": 16, "title": "[Load]\nname : LDBUS_11  13.8\np_mw : 3.5\nq_mvar : 1.8\nterminal_id : E-709"}, {"borderWidth": 2, "color": "#E8A838", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:16", "label": "LDBUS_14  13.8", "shape": "triangle", "size": 16, "title": "[Load]\nname : LDBUS_14  13.8\np_mw : 14.9\nq_mvar : 5.0\nterminal_id : E-717"}, {"borderWidth": 2, "color": "#E8A838", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:17", "label": "LDBUS_9   13.8", "shape": "triangle", "size": 16, "title": "[Load]\nname : LDBUS_9   13.8\np_mw : 29.5\nq_mvar : 16.6\nterminal_id : E-713"}, {"borderWidth": 2, "color": "#E8A838", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:32", "label": "LDBUS_2   69.0", "shape": "triangle", "size": 16, "title": "[Load]\nname : LDBUS_2   69.0\np_mw : 21.7\nq_mvar : 12.7\nterminal_id : E-699"}, {"borderWidth": 2, "color": "#E8A838", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:33", "label": "LDBUS_12  13.8", "shape": "triangle", "size": 16, "title": "[Load]\nname : LDBUS_12  13.8\np_mw : 6.1\nq_mvar : 1.6\nterminal_id : E-721"}, {"borderWidth": 2, "color": "#4C9BE8", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:40", "label": "BUS_2   69.0", "shape": "dot", "size": 28, "title": "[Substation]\nis_pv : True\nis_slack : False\nname : BUS_2   69.0\nnominal_voltage_kv : 69.0\nregion : Zone 1\nsv_voltage_kv : 72.105"}, {"borderWidth": 2, "color": "#4C9BE8", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:41", "label": "BUS_3   69.0", "shape": "dot", "size": 28, "title": "[Substation]\nis_pv : True\nis_slack : False\nname : BUS_3   69.0\nnominal_voltage_kv : 69.0\nregion : Zone 1\nsv_voltage_kv : 69.69"}, {"borderWidth": 2, "color": "#4C9BE8", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:42", "label": "BUS_1   69.0", "shape": "dot", "size": 28, "title": "[Substation]\nis_pv : False\nis_slack : True\nname : BUS_1   69.0\nnominal_voltage_kv : 69.0\nregion : Zone 1\nsv_voltage_kv : 73.14"}, {"borderWidth": 2, "color": "#4C9BE8", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:43", "label": "BUS_5   69.0", "shape": "dot", "size": 28, "title": "[Substation]\nis_pv : False\nis_slack : False\nname : BUS_5   69.0\nnominal_voltage_kv : 69.0\nregion : Zone 1\nsv_voltage_kv : 70.0897"}, {"borderWidth": 2, "color": "#4C9BE8", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:44", "label": "BUS_4   69.0", "shape": "dot", "size": 28, "title": "[Substation]\nis_pv : False\nis_slack : False\nname : BUS_4   69.0\nnominal_voltage_kv : 69.0\nregion : Zone 1\nsv_voltage_kv : 69.80303"}, {"borderWidth": 2, "color": "#4C9BE8", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:45", "label": "BUS_6   13.8", "shape": "dot", "size": 28, "title": "[Substation]\nis_pv : True\nis_slack : False\nname : BUS_6   13.8\nnominal_voltage_kv : 13.8\nregion : Zone 1\nsv_voltage_kv : 14.766"}, {"borderWidth": 2, "color": "#4C9BE8", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:46", "label": "BUS_13  13.8", "shape": "dot", "size": 28, "title": "[Substation]\nis_pv : False\nis_slack : False\nname : BUS_13  13.8\nnominal_voltage_kv : 13.8\nregion : Zone 1\nsv_voltage_kv : 14.446"}, {"borderWidth": 2, "color": "#4C9BE8", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:47", "label": "BUS_12  13.8", "shape": "dot", "size": 28, "title": "[Substation]\nis_pv : False\nis_slack : False\nname : BUS_12  13.8\nnominal_voltage_kv : 13.8\nregion : Zone 1\nsv_voltage_kv : 14.5362"}, {"borderWidth": 2, "color": "#4C9BE8", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:48", "label": "BUS_11  13.8", "shape": "dot", "size": 28, "title": "[Substation]\nis_pv : False\nis_slack : False\nname : BUS_11  13.8\nnominal_voltage_kv : 13.8\nregion : Zone 1\nsv_voltage_kv : 14.44355"}, {"borderWidth": 2, "color": "#4C9BE8", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:49", "label": "BUS_10  13.8", "shape": "dot", "size": 28, "title": "[Substation]\nis_pv : False\nis_slack : False\nname : BUS_10  13.8\nnominal_voltage_kv : 13.8\nregion : Zone 1\nsv_voltage_kv : 14.22641"}, {"borderWidth": 2, "color": "#4C9BE8", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:50", "label": "BUS_9   13.8", "shape": "dot", "size": 28, "title": "[Substation]\nis_pv : False\nis_slack : False\nname : BUS_9   13.8\nnominal_voltage_kv : 13.8\nregion : Zone 1\nsv_voltage_kv : 14.23756"}, {"borderWidth": 2, "color": "#E8A838", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:66", "label": "LDBUS_13  13.8", "shape": "triangle", "size": 16, "title": "[Load]\nname : LDBUS_13  13.8\np_mw : 13.5\nq_mvar : 5.8\nterminal_id : E-719"}, {"borderWidth": 2, "color": "#E8A838", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:67", "label": "LDBUS_7   13.8", "shape": "triangle", "size": 16, "title": "[Load]\nname : LDBUS_7   13.8\np_mw : 0.0\nq_mvar : 0.0\nterminal_id : E-715"}, {"borderWidth": 2, "color": "#E8A838", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:68", "label": "LDBUS_5   69.0", "shape": "triangle", "size": 16, "title": "[Load]\nname : LDBUS_5   69.0\np_mw : 7.6\nq_mvar : 1.6\nterminal_id : E-703"}, {"borderWidth": 2, "color": "#E8A838", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:78", "label": "LDBUS_10  13.8", "shape": "triangle", "size": 16, "title": "[Load]\nname : LDBUS_10  13.8\np_mw : 9.0\nq_mvar : 5.8\nterminal_id : E-711"}, {"borderWidth": 2, "color": "#4C9BE8", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:82", "label": "BUS_14  13.8", "shape": "dot", "size": 28, "title": "[Substation]\nis_pv : False\nis_slack : False\nname : BUS_14  13.8\nnominal_voltage_kv : 13.8\nregion : Zone 1\nsv_voltage_kv : 14.0764"}, {"borderWidth": 2, "color": "#4C9BE8", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:83", "label": "BUS_7   13.8", "shape": "dot", "size": 28, "title": "[Substation]\nis_pv : False\nis_slack : False\nname : BUS_7   13.8\nnominal_voltage_kv : 13.8\nregion : Zone 1\nsv_voltage_kv : 14.45973"}, {"borderWidth": 2, "color": "#4C9BE8", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:84", "label": "BUS_8   18.0", "shape": "dot", "size": 28, "title": "[Substation]\nis_pv : True\nis_slack : False\nname : BUS_8   18.0\nnominal_voltage_kv : 18.0\nregion : Zone 1\nsv_voltage_kv : 19.56076"}, {"borderWidth": 2, "color": "#2ECC71", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:85", "label": "BRANCH-9", "shape": "square", "size": 22, "title": "[Transformer]\nhv_b : 0.0\nhv_connection_kind : Y\nhv_grounded : true\nhv_nominal_voltage_kv : 69.0\nhv_phase_angle_clock : 0.0\nhv_r0_ohm : 0.0\nhv_r_ohm : 0.0\nhv_rated_s_mva : 100.0\nhv_rated_u_kv : 66.861\nhv_x0_ohm : 0.0\nhv_x_ohm : 24.863434\nlv_b : 0.0\nlv_connection_kind : Y\nlv_grounded : true\nlv_nominal_voltage_kv : 13.8\nlv_phase_angle_clock : 0.0\nlv_r0_ohm : 0.0\nlv_r_ohm : 0.0\nlv_rated_s_mva : 100.0\nlv_rated_u_kv : 13.8\nlv_x0_ohm : 0.0\nlv_x_ohm : 0.0\nname : BRANCH-9"}, {"borderWidth": 2, "color": "#2ECC71", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:86", "label": "BRANCH-10", "shape": "square", "size": 22, "title": "[Transformer]\nhv_b : 0.0\nhv_connection_kind : Y\nhv_grounded : true\nhv_nominal_voltage_kv : 69.0\nhv_phase_angle_clock : 0.0\nhv_r0_ohm : 0.0\nhv_r_ohm : 0.0\nhv_rated_s_mva : 100.0\nhv_rated_u_kv : 64.308\nhv_x0_ohm : 0.0\nhv_x_ohm : 10.422335\nlv_b : 0.0\nlv_connection_kind : Y\nlv_grounded : true\nlv_nominal_voltage_kv : 13.8\nlv_phase_angle_clock : 0.0\nlv_r0_ohm : 0.0\nlv_r_ohm : 0.0\nlv_rated_s_mva : 100.0\nlv_rated_u_kv : 13.8\nlv_x0_ohm : 0.0\nlv_x_ohm : 0.0\nname : BRANCH-10"}, {"borderWidth": 2, "color": "#2ECC71", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:87", "label": "BRANCH-8", "shape": "square", "size": 22, "title": "[Transformer]\nhv_b : 0.0\nhv_connection_kind : Y\nhv_grounded : true\nhv_nominal_voltage_kv : 69.0\nhv_phase_angle_clock : 0.0\nhv_r0_ohm : 0.0\nhv_r_ohm : 0.0\nhv_rated_s_mva : 100.0\nhv_rated_u_kv : 67.482\nhv_x0_ohm : 0.0\nhv_x_ohm : 9.522949\nlv_b : 0.0\nlv_connection_kind : Y\nlv_grounded : true\nlv_nominal_voltage_kv : 13.8\nlv_phase_angle_clock : 0.0\nlv_r0_ohm : 0.0\nlv_r_ohm : 0.0\nlv_rated_s_mva : 100.0\nlv_rated_u_kv : 13.8\nlv_x0_ohm : 0.0\nlv_x_ohm : 0.0\nname : BRANCH-8"}, {"borderWidth": 2, "color": "#2ECC71", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:88", "label": "BRANCH-14", "shape": "square", "size": 22, "title": "[Transformer]\nhv_b : 0.0\nhv_connection_kind : Y\nhv_grounded : true\nhv_nominal_voltage_kv : 18.0\nhv_phase_angle_clock : 0.0\nhv_r0_ohm : 0.0\nhv_r_ohm : 0.0\nhv_rated_s_mva : 100.0\nhv_rated_u_kv : 18.0\nhv_x0_ohm : 0.0\nhv_x_ohm : 0.0\nlv_b : 0.0\nlv_connection_kind : Y\nlv_grounded : true\nlv_nominal_voltage_kv : 13.8\nlv_phase_angle_clock : 0.0\nlv_r0_ohm : 0.0\nlv_r_ohm : 0.0\nlv_rated_s_mva : 100.0\nlv_rated_u_kv : 13.8\nlv_x0_ohm : 0.0\nlv_x_ohm : 0.33546\nname : BRANCH-14"}, {"borderWidth": 2, "color": "#E8A838", "font": {"color": "white"}, "id": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:89", "label": "LDBUS_6   13.8", "shape": "triangle", "size": 16, "title": "[Load]\nname : LDBUS_6   13.8\np_mw : 11.2\nq_mvar : 7.5\nterminal_id : E-701"}]);
+var edges   = new vis.DataSet([{"arrows": "to", "color": {"color": "#888888", "highlight": "#ffffff"}, "dashes": true, "font": {"color": "#888888", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:41", "label": "", "title": "[CONNECT_TO]\nterminal_id : E-707", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:0"}, {"arrows": "to", "color": {"color": "#888888", "highlight": "#ffffff"}, "dashes": true, "font": {"color": "#888888", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:44", "label": "", "title": "[CONNECT_TO]\nterminal_id : E-705", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:1"}, {"arrows": "to", "color": {"color": "#888888", "highlight": "#ffffff"}, "dashes": true, "font": {"color": "#888888", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:48", "label": "", "title": "[CONNECT_TO]\nterminal_id : E-709", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:14"}, {"arrows": "to", "color": {"color": "#888888", "highlight": "#ffffff"}, "dashes": true, "font": {"color": "#888888", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:82", "label": "", "title": "[CONNECT_TO]\nterminal_id : E-717", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:16"}, {"arrows": "to", "color": {"color": "#888888", "highlight": "#ffffff"}, "dashes": true, "font": {"color": "#888888", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:50", "label": "", "title": "[CONNECT_TO]\nterminal_id : E-713", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:17"}, {"arrows": "to", "color": {"color": "#888888", "highlight": "#ffffff"}, "dashes": true, "font": {"color": "#888888", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:40", "label": "", "title": "[CONNECT_TO]\nterminal_id : E-699", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:32"}, {"arrows": "to", "color": {"color": "#888888", "highlight": "#ffffff"}, "dashes": true, "font": {"color": "#888888", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:47", "label": "", "title": "[CONNECT_TO]\nterminal_id : E-721", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:33"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:42", "label": "BRANCH-1", "title": "[LINE]\nb0ch : 0.0\nbch : 0.0011090105\nfrom_terminal_id : E-428\nlength_km : 1.0\nname : BRANCH-1\nnominal_voltage_kv : 69.0\nr0_ohm : 0.0\nr_ohm : 0.922681\nrdf_id : BRANCH-1\nshort_circuit_end_temp_c : 80.0\nto_terminal_id : E-429\nx0_ohm : 0.0\nx_ohm : 2.817083", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:40"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:40", "label": "BRANCH-3", "title": "[LINE]\nb0ch : 0.0\nbch : 0.0009199746\nfrom_terminal_id : E-422\nlength_km : 1.0\nname : BRANCH-3\nnominal_voltage_kv : 69.0\nr0_ohm : 0.0\nr_ohm : 2.237193\nrdf_id : BRANCH-3\nshort_circuit_end_temp_c : 80.0\nto_terminal_id : E-423\nx0_ohm : 0.0\nx_ohm : 9.425351", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:41"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:40", "label": "BRANCH-5", "title": "[LINE]\nb0ch : 0.0\nbch : 0.0007141355\nfrom_terminal_id : E-437\nlength_km : 1.0\nname : BRANCH-5\nnominal_voltage_kv : 69.0\nr0_ohm : 0.0\nr_ohm : 2.711389\nrdf_id : BRANCH-5\nshort_circuit_end_temp_c : 80.0\nto_terminal_id : E-438\nx0_ohm : 0.0\nx_ohm : 8.278426", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:43"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:42", "label": "BRANCH-2", "title": "[LINE]\nb0ch : 0.0\nbch : 0.0010333961\nfrom_terminal_id : E-425\nlength_km : 1.0\nname : BRANCH-2\nnominal_voltage_kv : 69.0\nr0_ohm : 0.0\nr_ohm : 2.572368\nrdf_id : BRANCH-2\nshort_circuit_end_temp_c : 80.0\nto_terminal_id : E-426\nx0_ohm : 0.0\nx_ohm : 10.61893", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:43"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:44", "label": "BRANCH-7", "title": "[LINE]\nb0ch : 0.0\nbch : 0.0002688509\nfrom_terminal_id : E-431\nlength_km : 1.0\nname : BRANCH-7\nnominal_voltage_kv : 69.0\nr0_ohm : 0.0\nr_ohm : 0.635593\nrdf_id : BRANCH-7\nshort_circuit_end_temp_c : 80.0\nto_terminal_id : E-432\nx0_ohm : 0.0\nx_ohm : 2.004857", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:43"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:40", "label": "BRANCH-4", "title": "[LINE]\nb0ch : 0.0\nbch : 0.000785549\nfrom_terminal_id : E-440\nlength_km : 1.0\nname : BRANCH-4\nnominal_voltage_kv : 69.0\nr0_ohm : 0.0\nr_ohm : 2.766617\nrdf_id : BRANCH-4\nshort_circuit_end_temp_c : 80.0\nto_terminal_id : E-441\nx0_ohm : 0.0\nx_ohm : 8.394595", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:44"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:41", "label": "BRANCH-6", "title": "[LINE]\nb0ch : 0.0\nbch : 0.000726738\nfrom_terminal_id : E-434\nlength_km : 1.0\nname : BRANCH-6\nnominal_voltage_kv : 69.0\nr0_ohm : 0.0\nr_ohm : 3.190346\nrdf_id : BRANCH-6\nshort_circuit_end_temp_c : 80.0\nto_terminal_id : E-435\nx0_ohm : 0.0\nx_ohm : 8.142738", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:44"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:86", "label": "LV", "title": "[CONNECT_TO]\nside : LV\nterminal_id : E-568", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:45"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:45", "label": "BRANCH-13", "title": "[LINE]\nb0ch : 0.0\nbch : 0.0\nfrom_terminal_id : E-443\nlength_km : 1.0\nname : BRANCH-13\nnominal_voltage_kv : 13.8\nr0_ohm : 0.0\nr_ohm : 0.125976\nrdf_id : BRANCH-13\nshort_circuit_end_temp_c : 80.0\nto_terminal_id : E-444\nx0_ohm : 0.0\nx_ohm : 0.248086", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:46"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:47", "label": "BRANCH-19", "title": "[LINE]\nb0ch : 0.0\nbch : 0.0\nfrom_terminal_id : E-452\nlength_km : 1.0\nname : BRANCH-19\nnominal_voltage_kv : 13.8\nr0_ohm : 0.0\nr_ohm : 0.42072\nrdf_id : BRANCH-19\nshort_circuit_end_temp_c : 80.0\nto_terminal_id : E-453\nx0_ohm : 0.0\nx_ohm : 0.380651", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:46"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:45", "label": "BRANCH-12", "title": "[LINE]\nb0ch : 0.0\nbch : 0.0\nfrom_terminal_id : E-446\nlength_km : 1.0\nname : BRANCH-12\nnominal_voltage_kv : 13.8\nr0_ohm : 0.0\nr_ohm : 0.234069\nrdf_id : BRANCH-12\nshort_circuit_end_temp_c : 80.0\nto_terminal_id : E-447\nx0_ohm : 0.0\nx_ohm : 0.487164", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:47"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:45", "label": "BRANCH-11", "title": "[LINE]\nb0ch : 0.0\nbch : 0.0\nfrom_terminal_id : E-449\nlength_km : 1.0\nname : BRANCH-11\nnominal_voltage_kv : 13.8\nr0_ohm : 0.0\nr_ohm : 0.180879\nrdf_id : BRANCH-11\nshort_circuit_end_temp_c : 80.0\nto_terminal_id : E-450\nx0_ohm : 0.0\nx_ohm : 0.378785", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:48"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:49", "label": "BRANCH-18", "title": "[LINE]\nb0ch : 0.0\nbch : 0.0\nfrom_terminal_id : E-455\nlength_km : 1.0\nname : BRANCH-18\nnominal_voltage_kv : 13.8\nr0_ohm : 0.0\nr_ohm : 0.156256\nrdf_id : BRANCH-18\nshort_circuit_end_temp_c : 80.0\nto_terminal_id : E-456\nx0_ohm : 0.0\nx_ohm : 0.365778", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:48"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:50", "label": "BRANCH-16", "title": "[LINE]\nb0ch : 0.0\nbch : 0.0\nfrom_terminal_id : E-461\nlength_km : 1.0\nname : BRANCH-16\nnominal_voltage_kv : 13.8\nr0_ohm : 0.0\nr_ohm : 0.060578\nrdf_id : BRANCH-16\nshort_circuit_end_temp_c : 80.0\nto_terminal_id : E-462\nx0_ohm : 0.0\nx_ohm : 0.160921", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:49"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:85", "label": "LV", "title": "[CONNECT_TO]\nside : LV\nterminal_id : E-572", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:50"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:83", "label": "BRANCH-15", "title": "[LINE]\nb0ch : 0.0\nbch : 0.0\nfrom_terminal_id : E-464\nlength_km : 1.0\nname : BRANCH-15\nnominal_voltage_kv : 13.8\nr0_ohm : 0.0\nr_ohm : 0.0\nrdf_id : BRANCH-15\nshort_circuit_end_temp_c : 80.0\nto_terminal_id : E-465\nx0_ohm : 0.0\nx_ohm : 0.209503", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:50"}, {"arrows": "to", "color": {"color": "#888888", "highlight": "#ffffff"}, "dashes": true, "font": {"color": "#888888", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:46", "label": "", "title": "[CONNECT_TO]\nterminal_id : E-719", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:66"}, {"arrows": "to", "color": {"color": "#888888", "highlight": "#ffffff"}, "dashes": true, "font": {"color": "#888888", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:83", "label": "", "title": "[CONNECT_TO]\nterminal_id : E-715", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:67"}, {"arrows": "to", "color": {"color": "#888888", "highlight": "#ffffff"}, "dashes": true, "font": {"color": "#888888", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:43", "label": "", "title": "[CONNECT_TO]\nterminal_id : E-703", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:68"}, {"arrows": "to", "color": {"color": "#888888", "highlight": "#ffffff"}, "dashes": true, "font": {"color": "#888888", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:49", "label": "", "title": "[CONNECT_TO]\nterminal_id : E-711", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:78"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:46", "label": "BRANCH-20", "title": "[LINE]\nb0ch : 0.0\nbch : 0.0\nfrom_terminal_id : E-467\nlength_km : 1.0\nname : BRANCH-20\nnominal_voltage_kv : 13.8\nr0_ohm : 0.0\nr_ohm : 0.325519\nrdf_id : BRANCH-20\nshort_circuit_end_temp_c : 80.0\nto_terminal_id : E-468\nx0_ohm : 0.0\nx_ohm : 0.662769", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:82"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:50", "label": "BRANCH-17", "title": "[LINE]\nb0ch : 0.0\nbch : 0.0\nfrom_terminal_id : E-458\nlength_km : 1.0\nname : BRANCH-17\nnominal_voltage_kv : 13.8\nr0_ohm : 0.0\nr_ohm : 0.242068\nrdf_id : BRANCH-17\nshort_circuit_end_temp_c : 80.0\nto_terminal_id : E-459\nx0_ohm : 0.0\nx_ohm : 0.514911", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:82"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:87", "label": "LV", "title": "[CONNECT_TO]\nside : LV\nterminal_id : E-564", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:83"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:88", "label": "LV", "title": "[CONNECT_TO]\nside : LV\nterminal_id : E-576", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:84"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:44", "label": "HV", "title": "[CONNECT_TO]\nside : HV\nterminal_id : E-570", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:85"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:43", "label": "HV", "title": "[CONNECT_TO]\nside : HV\nterminal_id : E-566", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:86"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:44", "label": "HV", "title": "[CONNECT_TO]\nside : HV\nterminal_id : E-562", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:87"}, {"arrows": "to", "color": {"color": "#F4A261", "highlight": "#ffffff"}, "dashes": false, "font": {"color": "#F4A261", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:83", "label": "HV", "title": "[CONNECT_TO]\nside : HV\nterminal_id : E-574", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:88"}, {"arrows": "to", "color": {"color": "#888888", "highlight": "#ffffff"}, "dashes": true, "font": {"color": "#888888", "size": 11, "strokeWidth": 0}, "from": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:45", "label": "", "title": "[CONNECT_TO]\nterminal_id : E-701", "to": "4:1258bf35-5afa-4c2e-8eb2-87c402f61f99:89"}]);
+var netOpts = {"physics": {"solver": "forceAtlas2Based", "forceAtlas2Based": {"gravitationalConstant": -80, "centralGravity": 0.01, "springLength": 120, "springConstant": 0.08}, "stabilization": {"iterations": 200}}, "edges": {"arrows": {"to": {"enabled": true, "scaleFactor": 0.7}}, "color": {"color": "#aaaaaa", "highlight": "#ffffff"}, "width": 1.5, "smooth": {"type": "curvedCW", "roundness": 0.1}}, "interaction": {"hover": true, "tooltipDelay": 100, "navigationButtons": true, "keyboard": true}};
+netOpts.interaction = netOpts.interaction || {};
+netOpts.interaction.hover          = true;
+netOpts.interaction.tooltipDelay   = 80;
+netOpts.interaction.navigationButtons = true;
+netOpts.interaction.keyboard       = true;
+
+var network   = new vis.Network(document.getElementById("mynetwork"), { nodes, edges }, netOpts);
+var nodeColors = {};
+network.on("afterDrawing", function() {
+  if (Object.keys(nodeColors).length) return;
+  var all = nodes.get({ returnType: "Object" });
+  for (var id in all) nodeColors[id] = all[id].color;
+});
+
+var highlightActive = false;
+function highlightNeighbourhood(nodeId) {
+  var all = nodes.get({ returnType: "Object" });
+  highlightActive = true;
+  for (var id in all) {
+    all[id].color = "rgba(50,50,70,0.3)";
+    if (all[id].hiddenLabel === undefined) { all[id].hiddenLabel = all[id].label; all[id].label = undefined; }
+  }
+  network.getConnectedNodes(nodeId).concat([nodeId]).forEach(function(id) {
+    all[id].color = nodeColors[id];
+    if (all[id].hiddenLabel !== undefined) { all[id].label = all[id].hiddenLabel; delete all[id].hiddenLabel; }
+  });
+  nodes.update(Object.values(all));
+}
+function resetHighlight() {
+  if (!highlightActive) return;
+  var all = nodes.get({ returnType: "Object" });
+  for (var id in all) {
+    all[id].color = nodeColors[id];
+    if (all[id].hiddenLabel !== undefined) { all[id].label = all[id].hiddenLabel; delete all[id].hiddenLabel; }
+  }
+  nodes.update(Object.values(all));
+  highlightActive = false;
+}
+network.on("selectNode",   function(p) { highlightNeighbourhood(p.nodes[0]); });
+network.on("deselectNode", resetHighlight);
+
+// ============================================================
+// Live data (polled from server)
+// ============================================================
+var outputData = {};
+var outputDataLoaded = false;
+var simStatus  = { running: true, step: 0, total: null };
+
+// Tracks what is currently displayed in the chart pane.
+// { type: 'node'|'edge', id: string } or null
+var currentView = null;
+var pinned      = false;
+
+var _fetchingData   = false;
+var _fetchingStatus = false;
+
+async function refreshData() {
+  if (_fetchingData) return;
+  _fetchingData = true;
+  try {
+    var r = await fetch("./output.json?t=" + Date.now());
+    if (r.ok) {
+      var text = await r.text();
+      outputData = JSON.parse(text);
+      outputDataLoaded = Object.keys(outputData).length > 0;
+      var kEl = document.getElementById('data-keys');
+      if (kEl) kEl.textContent = outputDataLoaded
+        ? '\u2713 ' + Object.keys(outputData).length + ' series loaded'
+        : '\u26a0\ufe0f no data in file';
+      // Re-render whatever is currently shown so the chart updates live
+      _rerenderCurrentView();
+    } else {
+      var kEl = document.getElementById('data-keys');
+      if (kEl) kEl.textContent = '\u23f3 waiting for data\u2026 (HTTP ' + r.status + ')';
+    }
+  } catch(err) {
+    console.error('[Dashboard] output.json fetch/parse failed:', err);
+    var kEl = document.getElementById('data-keys');
+    if (kEl) kEl.textContent = '\u274c ' + (err.message || String(err));
+  }
+  _fetchingData = false;
+}
+
+async function refreshStatus() {
+  if (_fetchingStatus) return;
+  _fetchingStatus = true;
+  try {
+    var r = await fetch("./sim_status.json?t=" + Date.now());
+    if (r.ok) {
+      simStatus = await r.json();
+      updateStatusUI();
+    }
+  } catch(_) {}
+  _fetchingStatus = false;
+}
+
+function updateStatusUI() {
+  var badge    = document.getElementById("status-badge");
+  var dot      = document.getElementById("status-dot");
+  var text     = document.getElementById("status-text");
+  var bar      = document.getElementById("progress-bar");
+  var label    = document.getElementById("progress-label");
+  var step     = simStatus.step  || 0;
+  var total    = simStatus.total || "?";
+  var running  = simStatus.running;
+
+  badge.className = running ? "" : "done";
+  text.textContent = running ? "LIVE" : "COMPLETED";
+  label.textContent = "Step: " + step + " / " + total;
+
+  if (typeof total === "number" && total > 0) {
+    bar.style.width = Math.min(100, Math.round(step / total * 100)) + "%";
+  } else {
+    bar.style.width = "0%";
+  }
+}
+
+var DATA_INTERVAL   = setInterval(refreshData,   500);
+var STATUS_INTERVAL = setInterval(refreshStatus, 500);
+
+// Initial fetch
+refreshData();
+refreshStatus();
+
+// ============================================================
+// Chart helpers (identical to integrated.html)
+// ============================================================
+function buildBusFragment(label) {
+  var m = (label || "").match(/BUS_(\d+)\s+([\d.]+)/);
+  if (!m) return null;
+  var pad = "_".repeat(Math.max(0, 4 - m[1].length));
+  return "bus_" + m[1] + pad + m[2];
+}
+
+function getNodeSeries(nodeId) {
+  var node  = nodes.get(nodeId);
+  if (!node) return null;
+  var label = node.label || "";
+  var title = node.title || "";
+  var tm    = title.match(/^\[(\w+)\]/);
+  var ntype = tm ? tm[1] : "";
+
+  if (ntype === "Substation") {
+    var frag = buildBusFragment(label);
+    if (!frag) return null;
+    var series = [];
+    if (outputData["V_sub_" + frag + "_mag_kv"])
+      series.push({ key: "V_sub_" + frag + "_mag_kv", name: "Voltage (kV)", color: "#4C9BE8", yaxis: "y"  });
+    if (outputData["V_sub_" + frag + "_ang_deg"])
+      series.push({ key: "V_sub_" + frag + "_ang_deg", name: "Angle (deg)",  color: "#2ECC71", yaxis: "y3" });
+    if (!series.length) {
+      return { title: label.trim(),
+               subtitle: outputDataLoaded ? 'Key not found in output.json — check bus name mapping' : 'Simulation data loading\u2026',
+               series: [] };
+    }
+    return { title: label.trim(), subtitle: "Bus Voltage Magnitude & Angle", type: 'substation', series: series };
+
+  } else if (ntype === "Transformer") {
+    var bm = label.match(/BRANCH-(\d+)/);
+    if (!bm) return null;
+    var key = "V_branch_" + bm[1] + "_LV";
+    if (!outputData[key]) {
+      return { title: label.trim(),
+               subtitle: outputDataLoaded ? 'Key \"' + key + '\" not in output.json' : 'Simulation data loading\u2026',
+               series: [] };
+    }
+    return { title: label.trim(), subtitle: "LV-side Voltage (kV)", type: 'transformer',
+             series: [{ key: key, name: "V_LV (kV)", color: "#2ECC71", yaxis: "y" }] };
+
+  } else if (ntype === "Load") {
+    return { title: label.trim(), subtitle: "Load \u2014 no time-series output available", series: [] };
+  }
+  return null;
+}
+
+function getEdgeSeries(edgeId) {
+  var edge = edges.get(edgeId);
+  if (!edge || edge.dashes) return null;
+  var fn = nodes.get(edge.from);
+  var tn = nodes.get(edge.to);
+  if (!fn || !tn) return null;
+  var ff = buildBusFragment(fn.label || "");
+  var tf = buildBusFragment(tn.label || "");
+  if (!ff || !tf) return null;
+
+  var pKey = "P_loss_line_" + ff + "_" + tf + "_mw";
+  var qKey = "Q_loss_line_" + ff + "_" + tf + "_mvar";
+  var iKey = "I_from_line_" + ff + "_" + tf + "_kA";
+  if (!outputData[pKey]) {
+    pKey = "P_loss_line_" + tf + "_" + ff + "_mw";
+    qKey = "Q_loss_line_" + tf + "_" + ff + "_mvar";
+    iKey = "I_from_line_" + tf + "_" + ff + "_kA";
+  }
+  var series = [];
+  if (outputData[pKey]) series.push({ key: pKey, name: "P Loss (MW)",   color: "#E8A838", yaxis: "y"  });
+  if (outputData[qKey]) series.push({ key: qKey, name: "Q Loss (Mvar)", color: "#F4A261", yaxis: "y2" });
+  if (outputData[iKey]) series.push({ key: iKey, name: "I from (kA)",   color: "#9B59B6", yaxis: "y3" });
+  if (!series.length) {
+    return {
+      title:    (edge.label || "Line").trim(),
+      subtitle: outputDataLoaded
+        ? 'No loss keys found for ' + (fn.label||'').trim() + ' \u2192 ' + (tn.label||'').trim()
+        : 'Simulation data loading\u2026',
+      series:   []
+    };
+  }
+
+  return {
+    title:    (edge.label || "Line").trim(),
+    subtitle: (fn.label || "").trim() + " \u2192 " + (tn.label || "").trim(),
+    type:     'edge',
+    series:   series
+  };
+}
+
+function _buildLayout(traces, hasY2) {
+  var y2trace = traces.find(function(t) { return t && t.yaxis === "y2"; });
+  var layout = {
+    paper_bgcolor: "#12122a", plot_bgcolor: "#12122a",
+    font: { color: "#c0c0d0", size: 11 },
+    margin: { l: 52, r: hasY2 ? 52 : 16, t: 14, b: 36 },
+    xaxis: { title: { text: "Time Step", font: { size: 11 } },
+             gridcolor: "#1e2040", zerolinecolor: "#2d4a7a", tickfont: { size: 10 } },
+    yaxis: { title: { text: traces[0] ? traces[0].name : "", font: { size: 11 } },
+             gridcolor: "#1e2040", zerolinecolor: "#2d4a7a", tickfont: { size: 10 } },
+    legend: { x: 0.01, y: 0.99, bgcolor: "rgba(10,10,30,0.7)",
+              font: { size: 10 }, bordercolor: "#2d4a7a", borderwidth: 1 },
+    hovermode: "x unified",
+    hoverlabel: { bgcolor: "#1e2040", bordercolor: "#2d4a7a", font: { size: 11 } }
+  };
+  if (hasY2) {
+    layout.yaxis2 = {
+      title: { text: y2trace ? y2trace.name : "", font: { size: 11 } },
+      overlaying: "y", side: "right",
+      gridcolor: "#1a1a30", zeroline: false, tickfont: { size: 10 }
+    };
+  }
+  return layout;
+}
+
+function renderChart(chartData, isPinned) {
+  var titleEl    = document.getElementById("chart-title");
+  var subEl      = document.getElementById("chart-subtitle");
+  var plotDiv    = document.getElementById("chart-plotly");
+  var plotDiv2   = document.getElementById("chart-plotly-current");
+  var powerPh    = document.getElementById("chart-power-ph");
+  var currentPh  = document.getElementById("chart-current-ph");
+  var labelPower   = document.getElementById("label-power");
+  var labelCurrent = document.getElementById("label-current");
+
+  function showPowerPh(msg)    { plotDiv.style.display   = "none";  powerPh.style.display   = "flex"; if (msg) powerPh.innerHTML   = msg; }
+  function showCurrentPh(msg)  { plotDiv2.style.display  = "none";  currentPh.style.display = "flex"; if (msg) currentPh.innerHTML = msg; }
+  function showPowerChart()    { plotDiv.style.display   = "block"; powerPh.style.display   = "none"; }
+  function showCurrentChart()  { plotDiv2.style.display  = "block"; currentPh.style.display = "none"; }
+
+  if (!chartData) {
+    titleEl.textContent = "Simulation Results";
+    subEl.innerHTML     = "Hover or click a node / edge in the network";
+    labelPower.innerHTML   = "&#9889; Branch Power &mdash; P &amp; Q Loss";
+    labelCurrent.innerHTML = "&#126; Branch Current &mdash; I from (kA)";
+    showPowerPh("Hover or click a <span style='color:#F4A261;margin:0 3px;'>line edge</span> to view power loss");
+    showCurrentPh("Hover or click a <span style='color:#9B59B6;margin:0 3px;'>line edge</span> to view branch current");
+    return;
+  }
+
+  // Update sub-pane labels based on element type
+  if (chartData.type === 'substation') {
+    labelPower.innerHTML   = "&#9889; Voltage Magnitude (kV)";
+    labelCurrent.innerHTML = "&#126; Voltage Angle (deg)";
+  } else if (chartData.type === 'transformer') {
+    labelPower.innerHTML   = "&#9889; LV-side Voltage (kV)";
+    labelCurrent.innerHTML = "&#126; Branch Current &mdash; I from (kA)";
+  } else {
+    labelPower.innerHTML   = "&#9889; Branch Power &mdash; P &amp; Q Loss";
+    labelCurrent.innerHTML = "&#126; Branch Current &mdash; I from (kA)";
+  }
+
+  titleEl.textContent = chartData.title;
+  subEl.innerHTML     = (isPinned ? "<span style='color:#f4a261;'>&#128204; </span>" : "") + chartData.subtitle;
+
+  // Separate power (y / y2) series from current (y3) series
+  var powerSeries   = chartData.series.filter(function(s) { return s.yaxis !== "y3"; });
+  var currentSeries = chartData.series.filter(function(s) { return s.yaxis === "y3"; });
+
+  function seriesToTraces(seriesList, remapToY) {
+    return seriesList.map(function(s) {
+      var sd = outputData[s.key];
+      if (!sd) return null;
+      var steps = Object.keys(sd).map(Number).sort(function(a,b){return a-b;});
+      var yaxis = remapToY ? "y" : (s.yaxis || "y");
+      return {
+        x: steps, y: steps.map(function(t){ return sd[String(t)]; }),
+        name: s.name, type: "scatter", mode: "lines+markers",
+        marker: { size: 5, color: s.color },
+        line:   { color: s.color, width: 2 },
+        yaxis:  yaxis
+      };
+    }).filter(Boolean);
+  }
+
+  var powerTraces   = seriesToTraces(powerSeries, false);
+  var currentTraces = seriesToTraces(currentSeries, true);
+
+  // ── Power sub-pane ──
+  if (powerTraces.length) {
+    var hasY2 = powerSeries.some(function(s) { return s.yaxis === "y2"; });
+    showPowerChart();
+    try {
+      Plotly.react("chart-plotly", powerTraces, _buildLayout(powerTraces, hasY2), { responsive: true, displayModeBar: false });
+    } catch(e) { console.error('[Dashboard] Plotly.react (power) failed:', e); }
+  } else {
+    showPowerPh(chartData.series.length
+      ? "<span style='color:#666;'>No power data for this element</span>"
+      : "Hover or click a <span style='color:#F4A261;margin:0 3px;'>line edge</span> to view power loss");
+  }
+
+  // ── Current sub-pane ──
+  if (currentTraces.length) {
+    showCurrentChart();
+    try {
+      Plotly.react("chart-plotly-current", currentTraces, _buildLayout(currentTraces, false), { responsive: true, displayModeBar: false });
+    } catch(e) { console.error('[Dashboard] Plotly.react (current) failed:', e); }
+  } else {
+    showCurrentPh(chartData.series.length
+      ? "<span style='color:#666;'>No current data for this element</span>"
+      : "Hover or click a <span style='color:#9B59B6;margin:0 3px;'>line edge</span> to view branch current");
+  }
+}
+
+// ============================================================
+// Hover / click events
+// ============================================================
+var hoverTimer  = null;
+
+function _getChartForView(view) {
+  if (!view) return null;
+  return view.type === 'node' ? getNodeSeries(view.id) : getEdgeSeries(view.id);
+}
+
+function _rerenderCurrentView() {
+  if (!currentView) return;
+  renderChart(_getChartForView(currentView), pinned);
+}
+
+network.on("hoverNode", function(p) {
+  if (pinned) return;
+  clearTimeout(hoverTimer);
+  hoverTimer = setTimeout(function() {
+    currentView = { type: 'node', id: p.node };
+    renderChart(getNodeSeries(p.node), false);
+  }, 80);
+});
+network.on("hoverEdge", function(p) {
+  if (pinned) return;
+  clearTimeout(hoverTimer);
+  hoverTimer = setTimeout(function() {
+    currentView = { type: 'edge', id: p.edge };
+    renderChart(getEdgeSeries(p.edge), false);
+  }, 80);
+});
+network.on("blurNode",  function() {
+  if (pinned) return;
+  clearTimeout(hoverTimer);
+  // keep showing the chart until something else takes over
+});
+network.on("blurEdge",  function() {
+  if (pinned) return;
+  clearTimeout(hoverTimer);
+});
+
+network.on("click", function(p) {
+  clearTimeout(hoverTimer);
+
+  if (p.nodes.length > 0) {
+    currentView = { type: 'node', id: p.nodes[0] };
+    var d = getNodeSeries(p.nodes[0]);
+    if (d && d.series && d.series.length > 0) {
+      pinned = true;
+    } else {
+      pinned = false;
+    }
+    renderChart(d, pinned);
+  } else if (p.edges.length > 0) {
+    currentView = { type: 'edge', id: p.edges[0] };
+    var d = getEdgeSeries(p.edges[0]);
+    if (d && d.series && d.series.length > 0) {
+      pinned = true;
+    } else {
+      pinned = false;
+    }
+    renderChart(d, pinned);
+  } else {
+    // Click on empty canvas — unpin
+    pinned      = false;
+    currentView = null;
+    renderChart(null, false);
+  }
+});
+
+// ============================================================
+// Resizable dividers
+// ============================================================
+// Left/right: chart pane width
+(function() {
+  var divider = document.getElementById("divider");
+  var pane    = document.getElementById("chart-pane");
+  var drag    = false;
+  divider.addEventListener("mousedown", function(e) { drag = true; document.body.style.cursor = "col-resize"; e.preventDefault(); });
+  document.addEventListener("mousemove", function(e) {
+    if (!drag) return;
+    var r = document.getElementById("main").getBoundingClientRect();
+    var w = Math.max(300, Math.min(700, r.right - e.clientX));
+    pane.style.width = pane.style.minWidth = w + "px";
+  });
+  document.addEventListener("mouseup", function() { drag = false; document.body.style.cursor = ""; });
+})();
+// Top/bottom: power vs current chart split
+(function() {
+  var hdivider   = document.getElementById("chart-hdivider");
+  var topPane    = document.getElementById("chart-power-pane");
+  var botPane    = document.getElementById("chart-current-pane");
+  var drag       = false;
+  hdivider.addEventListener("mousedown", function(e) { drag = true; document.body.style.cursor = "row-resize"; e.preventDefault(); });
+  document.addEventListener("mousemove", function(e) {
+    if (!drag) return;
+    var body = document.getElementById("chart-body").getBoundingClientRect();
+    var relY = e.clientY - body.top;
+    var topH = Math.max(80, Math.min(body.height - 80 - 5, relY));
+    topPane.style.flex = "none";
+    botPane.style.flex = "none";
+    topPane.style.height = topH + "px";
+    botPane.style.height = (body.height - topH - 5) + "px";
+  });
+  document.addEventListener("mouseup", function() { drag = false; document.body.style.cursor = ""; });
+})();
+</script>
+</body>
+</html>

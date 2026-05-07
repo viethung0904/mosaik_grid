@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:cim="http://iec.ch/TC57/2012/CIM-schema-cim16#"
+         xmlns:md="http://iec.ch/TC57/61970-552/ModelDescription/1#"
+         xmlns:entsoe="http://entsoe.eu/Secretariat/ProfileExtension/2#">
+
+<md:FullModel rdf:about="simple_grid_cgmes_v2_4_15">
+    <md:Model.created>28/04/2026 00:00:00</md:Model.created>
+    <md:Model.modelingAuthoritySet>www.example.com</md:Model.modelingAuthoritySet>
+    <md:Model.profile>Topology</md:Model.profile>
+</md:FullModel>
+
+<!-- ================================================================ -->
+<!-- TOPOLOGICAL NODES                                                  -->
+<!-- ================================================================ -->
+
+<!-- N0: 110 kV bus – slack bus + TR1 HV side -->
+<cim:TopologicalNode rdf:ID="N0">
+    <cim:IdentifiedObject.name>N0</cim:IdentifiedObject.name>
+    <cim:TopologicalNode.BaseVoltage rdf:resource="#_bv-110kv-0000-0000-0000-000000000002"/>
+    <cim:TopologicalNode.ConnectivityNodeContainer rdf:resource="#_vl-n0-110-0000-0000-000000000001"/>
+    <cim:TopologicalNode.Terminal rdf:resource="#T-HVNetz"/>
+    <cim:TopologicalNode.Terminal rdf:resource="#T-TR1-0"/>
+</cim:TopologicalNode>
+
+<!-- N1: 20 kV bus – TR1 LV side + L1-2 send end + Load_1A + Load_1B -->
+<cim:TopologicalNode rdf:ID="N1">
+    <cim:IdentifiedObject.name>N1</cim:IdentifiedObject.name>
+    <cim:TopologicalNode.BaseVoltage rdf:resource="#_bv-020kv-0000-0000-0000-000000000001"/>
+    <cim:TopologicalNode.ConnectivityNodeContainer rdf:resource="#_vl-n1-020-0000-0000-000000000001"/>
+    <cim:TopologicalNode.Terminal rdf:resource="#T-TR1-1"/>
+    <cim:TopologicalNode.Terminal rdf:resource="#T-L12-0"/>
+    <cim:TopologicalNode.Terminal rdf:resource="#T-Load1A"/>
+    <cim:TopologicalNode.Terminal rdf:resource="#T-Load1B"/>
+</cim:TopologicalNode>
+
+<!-- N2: 20 kV bus – L1-2 receive end + Load_2A + Load_2B -->
+<cim:TopologicalNode rdf:ID="N2">
+    <cim:IdentifiedObject.name>N2</cim:IdentifiedObject.name>
+    <cim:TopologicalNode.BaseVoltage rdf:resource="#_bv-020kv-0000-0000-0000-000000000001"/>
+    <cim:TopologicalNode.ConnectivityNodeContainer rdf:resource="#_vl-n2-020-0000-0000-000000000001"/>
+    <cim:TopologicalNode.Terminal rdf:resource="#T-L12-1"/>
+    <cim:TopologicalNode.Terminal rdf:resource="#T-Load2A"/>
+    <cim:TopologicalNode.Terminal rdf:resource="#T-Load2B"/>
+</cim:TopologicalNode>
+
+<!-- ================================================================ -->
+<!-- BASE VOLTAGE BACK-REFERENCES                                       -->
+<!-- ================================================================ -->
+
+<cim:BaseVoltage rdf:about="#_bv-020kv-0000-0000-0000-000000000001">
+    <cim:BaseVoltage.TopologicalNode rdf:resource="#N1"/>
+    <cim:BaseVoltage.TopologicalNode rdf:resource="#N2"/>
+</cim:BaseVoltage>
+
+<cim:BaseVoltage rdf:about="#_bv-110kv-0000-0000-0000-000000000002">
+    <cim:BaseVoltage.TopologicalNode rdf:resource="#N0"/>
+</cim:BaseVoltage>
+
+<!-- ================================================================ -->
+<!-- VOLTAGE LEVEL BACK-REFERENCES                                      -->
+<!-- ================================================================ -->
+
+<cim:VoltageLevel rdf:about="#_vl-n0-110-0000-0000-000000000001">
+    <cim:ConnectivityNodeContainer.TopologicalNode rdf:resource="#N0"/>
+</cim:VoltageLevel>
+
+<cim:VoltageLevel rdf:about="#_vl-n1-020-0000-0000-000000000001">
+    <cim:ConnectivityNodeContainer.TopologicalNode rdf:resource="#N1"/>
+</cim:VoltageLevel>
+
+<cim:VoltageLevel rdf:about="#_vl-n2-020-0000-0000-000000000001">
+    <cim:ConnectivityNodeContainer.TopologicalNode rdf:resource="#N2"/>
+</cim:VoltageLevel>
+
+<!-- ================================================================ -->
+<!-- TERMINAL BACK-REFERENCES (TopologicalNode assignments)            -->
+<!-- ================================================================ -->
+
+<cim:Terminal rdf:about="#T-HVNetz">
+    <cim:Terminal.TopologicalNode rdf:resource="#N0"/>
+</cim:Terminal>
+
+<cim:Terminal rdf:about="#T-TR1-0">
+    <cim:Terminal.TopologicalNode rdf:resource="#N0"/>
+</cim:Terminal>
+
+<cim:Terminal rdf:about="#T-TR1-1">
+    <cim:Terminal.TopologicalNode rdf:resource="#N1"/>
+</cim:Terminal>
+
+<cim:Terminal rdf:about="#T-L12-0">
+    <cim:Terminal.TopologicalNode rdf:resource="#N1"/>
+</cim:Terminal>
+
+<cim:Terminal rdf:about="#T-L12-1">
+    <cim:Terminal.TopologicalNode rdf:resource="#N2"/>
+</cim:Terminal>
+
+<cim:Terminal rdf:about="#T-Load1A">
+    <cim:Terminal.TopologicalNode rdf:resource="#N1"/>
+</cim:Terminal>
+
+<cim:Terminal rdf:about="#T-Load1B">
+    <cim:Terminal.TopologicalNode rdf:resource="#N1"/>
+</cim:Terminal>
+
+<cim:Terminal rdf:about="#T-Load2A">
+    <cim:Terminal.TopologicalNode rdf:resource="#N2"/>
+</cim:Terminal>
+
+<cim:Terminal rdf:about="#T-Load2B">
+    <cim:Terminal.TopologicalNode rdf:resource="#N2"/>
+</cim:Terminal>
+
+</rdf:RDF>
