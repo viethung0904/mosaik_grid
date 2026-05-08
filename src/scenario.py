@@ -514,8 +514,10 @@ _graph_html   = os.path.join(PROJECT_DIR, 'graph.html')
 _dashboard    = os.path.join(PROJECT_DIR, 'live_dashboard.html')
 _status_path  = os.path.join(PROJECT_DIR, 'sim_status.json')
 
+import datetime as _dt
+_sim_start_time = _dt.datetime.now().isoformat(timespec='seconds')
 with open(_status_path, 'w') as _f:
-    json.dump({'running': True, 'step': 0, 'total': STOP}, _f)
+    json.dump({'running': True, 'step': 0, 'total': STOP, 'start_time': _sim_start_time}, _f)
 
 if generate_live_dashboard(_graph_html, _dashboard):
     _server, _url = start_live_server(PROJECT_DIR, port=8765)

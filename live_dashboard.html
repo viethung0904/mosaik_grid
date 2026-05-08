@@ -143,7 +143,7 @@ body {
   <div id="progress-wrap">
     <div id="progress-bar"></div>
   </div>
-  <span id="progress-label">step 0 / ?</span>
+  <span id="progress-label"></span>
   <span id="data-keys" style="font-size:10px;color:#888;margin-left:auto;">⏳ waiting for data</span>
 </div>
 
@@ -239,6 +239,13 @@ network.on("selectNode",   function(p) { highlightNeighbourhood(p.nodes[0]); });
 network.on("deselectNode", resetHighlight);
 
 // ============================================================
+// Simulation time mapping — step → real wall-clock time
+// start_time is read from sim_status.json (set when simulation starts)
+// ============================================================
+var SIM_START_DATE    = new Date(); // placeholder; overwritten from sim_status
+var STEP_DURATION_SEC = 1; // 1 second per mosaik step (time_resolution=1.0, step_size=1)
+
+// ============================================================
 // Live data (polled from server)
 // ============================================================
 var outputData = {};
@@ -287,6 +294,10 @@ async function refreshStatus() {
     var r = await fetch("./sim_status.json?t=" + Date.now());
     if (r.ok) {
       simStatus = await r.json();
+      // Update start time from the real wall-clock timestamp recorded in sim_status.json
+      if (simStatus.start_time) {
+        SIM_START_DATE = new Date(simStatus.start_time);
+      }
       updateStatusUI();
     }
   } catch(_) {}
@@ -305,7 +316,6 @@ function updateStatusUI() {
 
   badge.className = running ? "" : "done";
   text.textContent = running ? "LIVE" : "COMPLETED";
-  label.textContent = "Step: " + step + " / " + total;
 
   if (typeof total === "number" && total > 0) {
     bar.style.width = Math.min(100, Math.round(step / total * 100)) + "%";
@@ -316,6 +326,20 @@ function updateStatusUI() {
 
 var DATA_INTERVAL   = setInterval(refreshData,   500);
 var STATUS_INTERVAL = setInterval(refreshStatus, 500);
+
+// Live system clock — updates the progress label every second
+function pad(n) { return n < 10 ? '0' + n : '' + n; }
+function formatNow() {
+  var d = new Date();
+  return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear() +
+         ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+}
+function tickClock() {
+  var label = document.getElementById('progress-label');
+  if (label) label.textContent = formatNow();
+}
+tickClock();
+setInterval(tickClock, 1000);
 
 // Initial fetch
 refreshData();
@@ -391,8 +415,8 @@ function getEdgeSeries(edgeId) {
     iKey = "I_from_line_" + tf + "_" + ff + "_kA";
   }
   var series = [];
-  if (outputData[pKey]) series.push({ key: pKey, name: "P Loss (MW)",   color: "#E8A838", yaxis: "y"  });
-  if (outputData[qKey]) series.push({ key: qKey, name: "Q Loss (Mvar)", color: "#F4A261", yaxis: "y2" });
+  if (outputData[pKey]) series.push({ key: pKey, name: "P Loss (MW)",   color: "#FF8C00", yaxis: "y",  mode: "lines" });
+  if (outputData[qKey]) series.push({ key: qKey, name: "Q Loss (Mvar)", color: "#4C9BE8", yaxis: "y2", mode: "lines" });
   if (outputData[iKey]) series.push({ key: iKey, name: "I from (kA)",   color: "#9B59B6", yaxis: "y3" });
   if (!series.length) {
     return {
@@ -418,7 +442,8 @@ function _buildLayout(traces, hasY2) {
     paper_bgcolor: "#12122a", plot_bgcolor: "#12122a",
     font: { color: "#c0c0d0", size: 11 },
     margin: { l: 52, r: hasY2 ? 52 : 16, t: 14, b: 36 },
-    xaxis: { title: { text: "Time Step", font: { size: 11 } },
+    xaxis: { title: { text: "Time", font: { size: 11 } },
+             type: "date", tickformat: "%d.%m.%Y %H:%M:%S",
              gridcolor: "#1e2040", zerolinecolor: "#2d4a7a", tickfont: { size: 10 } },
     yaxis: { title: { text: traces[0] ? traces[0].name : "", font: { size: 11 } },
              gridcolor: "#1e2040", zerolinecolor: "#2d4a7a", tickfont: { size: 10 } },
@@ -487,9 +512,11 @@ function renderChart(chartData, isPinned) {
       if (!sd) return null;
       var steps = Object.keys(sd).map(Number).sort(function(a,b){return a-b;});
       var yaxis = remapToY ? "y" : (s.yaxis || "y");
+      var mode  = s.mode || "lines+markers";
       return {
-        x: steps, y: steps.map(function(t){ return sd[String(t)]; }),
-        name: s.name, type: "scatter", mode: "lines+markers",
+        x: steps.map(function(t){ return new Date(SIM_START_DATE.getTime() + t * STEP_DURATION_SEC * 1000).toISOString(); }),
+        y: steps.map(function(t){ return sd[String(t)]; }),
+        name: s.name, type: "scatter", mode: mode,
         marker: { size: 5, color: s.color },
         line:   { color: s.color, width: 2 },
         yaxis:  yaxis

@@ -74,6 +74,14 @@ class Collector(mosaik_api.Simulator):
     def init(self, sid, time_resolution, output_dir='.', total_steps=None):
         self.output_dir  = output_dir
         self.total_steps = total_steps
+        # Read start_time written by scenario.py so we can preserve it
+        self._start_time = None
+        try:
+            _sp = os.path.join(output_dir, 'sim_status.json')
+            with open(_sp) as _f:
+                self._start_time = json.load(_f).get('start_time')
+        except Exception:
+            pass
         return self.meta
 
     def create(self, num, model):
@@ -128,7 +136,8 @@ class Collector(mosaik_api.Simulator):
             try:
                 with open(status_path, 'w') as f:
                     json.dump({'running': True, 'step': current_step,
-                               'total': self.total_steps}, f)
+                               'total': self.total_steps,
+                               'start_time': self._start_time}, f)
             except Exception as e:
                 print(f'[Collector] sim_status.json save failed: {e}')
 
@@ -151,7 +160,8 @@ class Collector(mosaik_api.Simulator):
             with open(status_path, 'w') as f:
                 json.dump({'running': False,
                            'step':    self.total_steps,
-                           'total':   self.total_steps}, f)
+                           'total':   self.total_steps,
+                           'start_time': self._start_time}, f)
         except Exception as e:
             print(f'[Collector] Could not write final sim_status.json: {e}')
 
