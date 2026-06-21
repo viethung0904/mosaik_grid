@@ -1,0 +1,53 @@
+Comparison summary: output_branch.json vs output_transformer.json
+
+Buses compared (mag): 14
+
+Top voltage magnitude differences (kV):
+- sub_bus_5___69.0: branch=70.089704 kV  transformer=71.515688 kV  Δ=1.425984e+00 kV (2.035%)
+- sub_bus_4___69.0: branch=69.803036 kV  transformer=71.025867 kV  Δ=1.222832e+00 kV (1.752%)
+- sub_bus_10__13.8: branch=14.226416 kV  transformer=14.226416 kV  Δ=0.000000e+00 kV (0.000%)
+- sub_bus_11__13.8: branch=14.443560 kV  transformer=14.443560 kV  Δ=0.000000e+00 kV (0.000%)
+- sub_bus_12__13.8: branch=14.536208 kV  transformer=14.536208 kV  Δ=0.000000e+00 kV (0.000%)
+- sub_bus_13__13.8: branch=14.446006 kV  transformer=14.446006 kV  Δ=0.000000e+00 kV (0.000%)
+- sub_bus_14__13.8: branch=14.076408 kV  transformer=14.076408 kV  Δ=0.000000e+00 kV (0.000%)
+- sub_bus_1___69.0: branch=73.140000 kV  transformer=73.140000 kV  Δ=0.000000e+00 kV (0.000%)
+- sub_bus_2___69.0: branch=72.105000 kV  transformer=72.105000 kV  Δ=0.000000e+00 kV (0.000%)
+- sub_bus_3___69.0: branch=69.690000 kV  transformer=69.690000 kV  Δ=0.000000e+00 kV (0.000%)
+
+Angles compared: 14
+
+Top angle differences (deg):
+- sub_bus_4___69.0: branch=-10.222332°  transformer=-5.943144°  Δ=4.279187e+00°
+- sub_bus_5___69.0: branch=-8.749470°  transformer=-4.766730°  Δ=3.982740e+00°
+- sub_bus_3___69.0: branch=-12.760114°  transformer=-9.339485°  Δ=3.420629e+00°
+- sub_bus_2___69.0: branch=-4.991076°  transformer=-2.947088°  Δ=2.043988e+00°
+- sub_bus_10__13.8: branch=-15.022926°  transformer=-15.022926°  Δ=0.000000e+00°
+- sub_bus_11__13.8: branch=-14.841523°  transformer=-14.841523°  Δ=0.000000e+00°
+- sub_bus_12__13.8: branch=-15.275810°  transformer=-15.275810°  Δ=0.000000e+00°
+- sub_bus_13__13.8: branch=-15.311520°  transformer=-15.311520°  Δ=0.000000e+00°
+- sub_bus_14__13.8: branch=-16.055202°  transformer=-16.055202°  Δ=0.000000e+00°
+- sub_bus_1___69.0: branch=0.000000°  transformer=0.000000°  Δ=0.000000e+00°
+
+Transformer/branch P_loss comparisons: 20
+
+Top P_loss differences (MW):
+- P_loss_line_bus_1___69.0_bus_2___69.0_mw: branch=4.311859 MW  transformer=1.577224 MW  Δ=-2.734634e+00 MW (-63.421%)
+- P_loss_line_bus_1___69.0_bus_5___69.0_mw: branch=2.771413 MW  transformer=0.836516 MW  Δ=-1.934897e+00 MW (-69.816%)
+- P_loss_line_bus_2___69.0_bus_4___69.0_mw: branch=1.672473 MW  transformer=0.537039 MW  Δ=-1.135434e+00 MW (-67.890%)
+- P_loss_line_bus_2___69.0_bus_5___69.0_mw: branch=0.921838 MW  transformer=0.198232 MW  Δ=-7.236069e-01 MW (-78.496%)
+- P_loss_line_bus_2___69.0_bus_3___69.0_mw: branch=2.338239 MW  transformer=1.628649 MW  Δ=-7.095894e-01 MW (-30.347%)
+- P_loss_line_bus_3___69.0_bus_4___69.0_mw: branch=0.398560 MW  transformer=0.799731 MW  Δ=4.011707e-01 MW (100.655%)
+- P_loss_line_bus_4___69.0_bus_5___69.0_mw: branch=0.476327 MW  transformer=0.342153 MW  Δ=-1.341738e-01 MW (-28.168%)
+- P_loss_branch_10_mw: branch=0.000000 MW  transformer=0.000000 MW  Δ=0.000000e+00 MW (N/A)
+- P_loss_branch_14_mw: branch=0.000000 MW  transformer=0.000000 MW  Δ=0.000000e+00 MW (N/A)
+- P_loss_branch_8_mw: branch=0.000000 MW  transformer=0.000000 MW  Δ=0.000000e+00 MW (N/A)
+- P_loss_branch_9_mw: branch=0.000000 MW  transformer=0.000000 MW  Δ=0.000000e+00 MW (N/A)
+- P_loss_line_bus_10__13.8_bus_11__13.8_mw: branch=0.048604 MW  transformer=0.048604 MW  Δ=0.000000e+00 MW (0.000%)
+- P_loss_line_bus_12__13.8_bus_13__13.8_mw: branch=0.010741 MW  transformer=0.010741 MW  Δ=0.000000e+00 MW (0.000%)
+- P_loss_line_bus_13__13.8_bus_14__13.8_mw: branch=0.102010 MW  transformer=0.102010 MW  Δ=0.000000e+00 MW (0.000%)
+- P_loss_line_bus_6___13.8_bus_11__13.8_mw: branch=0.118263 MW  transformer=0.118263 MW  Δ=0.000000e+00 MW (0.000%)
+- P_loss_line_bus_6___13.8_bus_12__13.8_mw: branch=0.080173 MW  transformer=0.080173 MW  Δ=0.000000e+00 MW (0.000%)
+- P_loss_line_bus_6___13.8_bus_13__13.8_mw: branch=0.249590 MW  transformer=0.249590 MW  Δ=0.000000e+00 MW (0.000%)
+- P_loss_line_bus_7___13.8_bus_9___13.8_mw: branch=0.000000 MW  transformer=0.000000 MW  Δ=0.000000e+00 MW (N/A)
+- P_loss_line_bus_9___13.8_bus_10__13.8_mw: branch=0.006062 MW  transformer=0.006062 MW  Δ=0.000000e+00 MW (0.000%)
+- P_loss_line_bus_9___13.8_bus_14__13.8_mw: branch=0.090356 MW  transformer=0.090356 MW  Δ=0.000000e+00 MW (0.000%)

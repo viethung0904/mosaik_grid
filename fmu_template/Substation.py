@@ -6,21 +6,22 @@ from component_model.variable import Variable
 
 
 class Substation(Model):
-    """CIGRE MV Network substation bus FMU — LIM-based phasor-domain power flow.
+    """IEEE 14-bus substation bus FMU — LIM (Gauss-Jacobi) phasor-domain power flow.
 
-    Each bus in the CIGRE MV grid becomes one instance of this FMU.
-    The one-step FMI communication delay between SubstationFMUs and LineFMUs
-    provides the LIM latency inherently — no extra numerical trick is needed.
+    Each bus in the network becomes one instance of this FMU.
+    Each mosaik tick performs ONE relaxed Gauss-Jacobi iteration:
 
-    LIM update (under-relaxed Jacobi):
-        I_load   = conj(S_load / V^(k))
-        I_shunt  = jB_shunt · V^(k)
-        residual = I_in^(k+1) − I_load − I_shunt
-        V^(k+1)  = V^(k) + ω · residual / Y_self
+        ΔV = ω · (I_in − I_load(V)) / Y_self
+        V_new = V_old + ΔV
 
-    Why ω < 1 is required (radial / tree networks):
-        bch ≈ 0  →  Y_off ≈ Y_self  →  spectral radius ρ ≥ 1 for pure Jacobi.
-        ω = 0.5 gives ρ_eff ≈ 0.5, converging in ~3500 FMI steps.
+    where I_load = conj(S/V) + jB·V  is the constant-power load current,
+    Y_self = Σ y_ij  is the bus self-admittance (series terms only),
+    and ω = omega_relax (0.5 recommended for meshed networks).
+
+    The fixed-point condition (I_in = I_load) is equivalent to KCL, so the
+    steady-state solution is the correct power-flow result.  N_LIM mosaik
+    ticks are executed per physical time step; the time_shifted=True delay on
+    Sub→Line connections enforces the Gauss-Jacobi one-step ordering.
 
     Parameters:
         Y_self_re   — real part of bus self-admittance  Σ y_ij  [S]
@@ -54,8 +55,8 @@ class Substation(Model):
         is_slack: float = 0.0,         #     — 1.0 = slack bus, 0.0 = load bus
         V_slack_kv: float = 0.0,       # kV  — slack voltage magnitude
         V_slack_ang_deg: float = 0.0,  # deg — slack bus reference angle (0.0 for global slack)
-        is_pv: float = 0.0,            #     — 1.0 = PV bus (scheduled P, regulated |V|, free angle)
-        V_pv_kv: float = 0.0,          # kV  — target |V| magnitude for PV bus
+        is_sync_machine: float = 0.0,   #     — 1.0 = SynchronousMachine bus (scheduled P, regulated |V|, free angle)
+        V_reg_kv: float = 0.0,         # kV  — voltage regulation setpoint for SynchronousMachine bus
         I_in_mag: float = 0.0,         # kA  — net injected current magnitude (input)
         I_in_ang: float = 0.0,         # deg — net injected current angle (input)
         P_load_mw: float = 0.0,        # MW  — active load demand (input)
@@ -74,8 +75,8 @@ class Substation(Model):
         self._is_slack       = self._interface("is_slack",       is_slack)
         self._V_slack_kv     = self._interface("V_slack_kv",     V_slack_kv)
         self._V_slack_ang_deg= self._interface("V_slack_ang_deg",V_slack_ang_deg)
-        self._is_pv          = self._interface("is_pv",          is_pv)
-        self._V_pv_kv        = self._interface("V_pv_kv",        V_pv_kv)
+        self._is_sync_machine  = self._interface("is_sync_machine",  is_sync_machine)
+        self._V_reg_kv       = self._interface("V_reg_kv",       V_reg_kv)
 
         # Inputs
         self._I_in_mag     = self._interface("I_in_mag",     I_in_mag)
@@ -104,13 +105,27 @@ class Substation(Model):
 
     def do_step(self, current_time: float, step_size: float) -> bool:
         """
-        One LIM Jacobi iteration for this bus node.
+        LIM (Gauss-Jacobi) bus voltage updater.
 
-        For the phasor-domain case, step_size is dimensionless (= one iteration).
-        For EMT-domain use, step_size = H seconds; H must satisfy
-            H < 0.9 · min_branch(2√(L·C))
-        which for the CIGRE MV grid is H_max ≈ 5.8 µs
-        (see lim_stability_dt() in grid_sim.py).
+        Each call performs ONE relaxed Gauss-Jacobi step:
+
+            ΔV = ω · (I_in − I_load(V)) / Y_self
+            V_new = V_old + ΔV
+
+        where I_load = conj(S/V) + jB·V  is the load current at the previous voltage,
+        Y_self = Y_self_re + j·Y_self_im is the bus self-admittance (Σ 1/Z_k, series only),
+        and ω = omega_relax (0.5 recommended for meshed networks).
+
+        This replaces the previous per-step Newton-Raphson solver.  NR with fixed I_in
+        finds the exact root of  I_in = conj(S/V)  for whatever I_in the line FMUs
+        provide — including the wildly wrong I_in that arises during outer-loop
+        transients — which sends V to non-physical roots (e.g. 248 MV).  The LIM
+        update is bounded by |ΔV| ~ |residual| / |Y_self|, so it remains stable even
+        when I_in is temporarily wrong.
+
+        The ACLineSegment pi-model delivers I_in = Σ I_to_k = Σ y_k·(V_k−V_i) − jΣ(bch_k/2)·V_i.
+        The LIM fixed-point condition I_in = I_load is equivalent to KCL, so the
+        steady-state solution is the correct power-flow result.
         """
         if self.is_slack >= 0.5:
             # Slack bus: voltage fixed at reference — no update needed.
@@ -167,9 +182,9 @@ class Substation(Model):
                                 "parameter", "fixed", None),
             "V_slack_ang_deg": ("Slack bus reference voltage angle [deg]",
                                 "parameter", "fixed", None),
-            "is_pv":           ("1.0 = PV bus (scheduled P, regulated |V|, free angle)",
+            "is_sync_machine":  ("1.0 = SynchronousMachine bus (scheduled P, regulated |V|, free angle)",
                                 "parameter", "fixed", None),
-            "V_pv_kv":         ("PV bus target voltage magnitude [kV]",
+            "V_reg_kv":        ("Voltage regulation setpoint [kV] for SynchronousMachine bus",
                                 "parameter", "fixed", None),
             "I_in_mag":    ("Magnitude of net current injected by adjacent LineFMUs [kA]",
                             "input", "continuous", None),

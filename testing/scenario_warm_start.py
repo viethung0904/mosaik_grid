@@ -63,7 +63,7 @@ def fetch_all_network_params():
             sub_records = session.run(
                 'MATCH (s:Substation) '
                 'RETURN s.name AS name, s.nominal_voltage_kv AS v_nom, '
-                '       s.is_slack AS is_slack, s.is_pv AS is_pv, '
+                '       s.is_slack AS is_slack, s.is_sync_machine AS is_sync_machine, '
                 '       s.sv_voltage_kv AS sv_v, s.sv_angle_deg AS sv_ang, '
                 '       s.p_gen_mw AS p_gen_mw, s.q_gen_mvar AS q_gen_mvar '
                 'ORDER BY s.name'
@@ -72,7 +72,7 @@ def fetch_all_network_params():
                 r['name']: {
                     'v_nom_kv':      r['v_nom'] if r['v_nom'] is not None else 20.0,
                     'is_slack':      bool(r['is_slack']) if r['is_slack'] is not None else False,
-                    'is_pv':         bool(r['is_pv'])    if r['is_pv']    is not None else False,
+                    'is_sync_machine': bool(r['is_sync_machine']) if r['is_sync_machine'] is not None else False,
                     'sv_voltage_kv': r['sv_v']  if r['sv_v']  is not None else None,
                     'sv_angle_deg':  r['sv_ang'] if r['sv_ang'] is not None else 0.0,
                     'p_gen_mw':      r['p_gen_mw']   if r['p_gen_mw']   is not None else 0.0,
@@ -128,8 +128,8 @@ def fetch_all_network_params():
 print('Fetching network parameters from GraphDB...')
 _sub_params, _transformers, _line_params, _load_params = fetch_all_network_params()
 
-_slack_subs = {name for name, sp in _sub_params.items() if sp['is_slack']}
-_pv_subs    = {name for name, sp in _sub_params.items() if sp['is_pv']}
+_slack_subs         = {name for name, sp in _sub_params.items() if sp['is_slack']}
+_sync_machine_subs  = {name for name, sp in _sub_params.items() if sp['is_sync_machine']}
 
 # LV-side buses of transformers act as voltage-controlled (slack) nodes for their
 # downstream zone.  Their operating voltage is the CIM SvVoltage reference value.
@@ -139,7 +139,7 @@ _, _, _tr_edges_pre = fetch_edges()
 _lv_slack_subs = {_tr['lv_sub'] for _tr in _tr_edges_pre if _tr['lv_sub'] not in _slack_subs}
 _all_slack_subs = _slack_subs | _lv_slack_subs
 print(f'  True slack buses (is_slack=True): {sorted(_slack_subs)}')
-print(f'  PV generator buses (is_pv=True):  {sorted(_pv_subs)}')
+print(f'  SynchronousMachine buses (is_sync_machine=True): {sorted(_sync_machine_subs)}')
 print(f'  LV transformer buses (treated as slack): {sorted(_lv_slack_subs)}')
 for _t in _transformers:
     print(f"  Transformer {_t['name']}: hv={_t.get('hv_nominal_voltage_kv')} kV / lv={_t.get('lv_nominal_voltage_kv')} kV")
@@ -350,25 +350,25 @@ for _sub_name in _all_subs:
     _v_nom = _sp['v_nom_kv']
     # Use CIM operating voltage if available, else fall back to nominal
     _v_slack = _sp.get('sv_voltage_kv') or _v_nom
-    _is_slack = _sub_name in _all_slack_subs
-    _is_pv    = _sub_name in _pv_subs
+    _is_slack        = _sub_name in _all_slack_subs
+    _is_sync_machine = _sub_name in _sync_machine_subs
     if _is_slack:
         _v_ang = _sp.get('sv_angle_deg', 0.0)
         _e = bus_sim.Substation.create(1, is_slack=1.0, V_slack_kv=_v_slack,
                                        V_slack_ang_deg=_v_ang)[0]
-    elif _is_pv:
+    elif _is_sync_machine:
         _yre, _yim = _y_self.get(_sub_name, (0.0, 0.0))
         _v_pv     = _sp.get('sv_voltage_kv') or _v_nom
-        # PV buses: flat start for magnitude (overridden by is_pv clamp anyway),
+        # SynchronousMachine buses: flat start for magnitude (overridden by is_sync_machine clamp anyway),
         # but warm-start the angle at the CIM sv_angle reference.  This is required
-        # for isolated PV buses like BUS_8 where Y_self=0 prevents any LIM angle
-        # update, and improves convergence for connected PV buses from flat start.
+        # for isolated SM buses like BUS_8 where Y_self=0 prevents any LIM angle
+        # update, and improves convergence for connected SM buses from flat start.
         _v_pv_ang = _sp.get('sv_angle_deg', 0.0)
         _e = bus_sim.Substation.create(
             1, Y_self_re=_yre, Y_self_im=_yim,
             B_shunt=0.0, omega_relax=0.5, is_slack=0.0,
             V_slack_kv=_v_nom, V_slack_ang_deg=_v_pv_ang,
-            is_pv=1.0, V_pv_kv=_v_pv)[0]
+            is_sync_machine=1.0, V_reg_kv=_v_pv)[0]
     else:
         _yre, _yim = _y_self.get(_sub_name, (0.0, 0.0))
         # Flat start: initialise all non-slack buses at nominal voltage, 0° angle.
@@ -377,7 +377,7 @@ for _sub_name in _all_subs:
             B_shunt=0.0, omega_relax=0.5, is_slack=0.0,
             V_slack_kv=_v_nom, V_slack_ang_deg=0.0)[0]
     _entity_map[_sub_var(_sub_name)] = _e
-    print(f'  Instantiated Substation {_sub_name} (is_slack={_is_slack}, is_pv={_is_pv}, V={_v_slack} kV)')
+    print(f'  Instantiated Substation {_sub_name} (is_slack={_is_slack}, is_sync_machine={_is_sync_machine}, V={_v_slack} kV)')
 
 # ── Lines: one entity per LINE edge ───────────────────────────────────────────
 line_sim = world.start('ACLineSegment',
@@ -401,20 +401,20 @@ for _load_name, _lp in _load_params.items():
     _entity_map[_load_var(_load_name)] = _e
     print(f'  Instantiated Load {_load_name}')
 
-# ── PV bus generator injection loads ─────────────────────────────────────────
-# Each PV bus has a scheduled active power injection modelled as a negative-P
+# ── SynchronousMachine bus generator injection loads ─────────────────────────
+# Each SynchronousMachine bus has a scheduled active power injection modelled as a negative-P
 # Load FMU.  The substation P_load_mw input is the sum of all connected loads
 # (real + this generator load), so net demand = P_load_direct - P_gen.
-_PV_GEN_LOAD_KEY = '__pv_gen__{}'
-for _pv_name in sorted(_pv_subs):
-    _sp = _sub_params.get(_pv_name, {})
+_SM_GEN_LOAD_KEY = '__sm_gen__{}'
+for _sm_name in sorted(_sync_machine_subs):
+    _sp = _sub_params.get(_sm_name, {})
     _p_gen = _sp.get('p_gen_mw') or 0.0
     _q_gen = _sp.get('q_gen_mvar') or 0.0
     if abs(_p_gen) < 1e-9 and abs(_q_gen) < 1e-9:
         continue  # no injection to model
     _e = load_sim.Load.create(1, p_mw=-_p_gen, q_mvar=-_q_gen)[0]
-    _entity_map[_PV_GEN_LOAD_KEY.format(_pv_name)] = _e
-    print(f'  Instantiated PV generator injection at {_pv_name}: P_gen={_p_gen:.4f} MW, Q_gen={_q_gen:.4f} MVAr')
+    _entity_map[_SM_GEN_LOAD_KEY.format(_sm_name)] = _e
+    print(f'  Instantiated SynchronousMachine generator injection at {_sm_name}: P_gen={_p_gen:.4f} MW, Q_gen={_q_gen:.4f} MVAr')
 
 # ── Transformer equivalent loads at HV buses ──────────────────────────────────
 # Each transformer sinks power from its HV substation equal to the total LV-zone demand.
@@ -475,15 +475,15 @@ for _hv_bus in _hv_tr_equiv:
     world.connect(_te_e, _hv_e, ('P_load_mw',   'P_load_mw'))
     world.connect(_te_e, _hv_e, ('Q_load_mvar', 'Q_load_mvar'))
 
-# PV generator injection loads: negative-P source at each PV bus
-for _pv_name in sorted(_pv_subs):
-    _key = _PV_GEN_LOAD_KEY.format(_pv_name)
+# SynchronousMachine generator injection loads: negative-P source at each SM bus
+for _sm_name in sorted(_sync_machine_subs):
+    _key = _SM_GEN_LOAD_KEY.format(_sm_name)
     if _key not in _entity_map:
         continue
-    _pv_gen_e = _entity_map[_key]
-    _bus_e    = _entity_map[_sub_var(_pv_name)]
-    world.connect(_pv_gen_e, _bus_e, ('P_load_mw',   'P_load_mw'))
-    world.connect(_pv_gen_e, _bus_e, ('Q_load_mvar', 'Q_load_mvar'))
+    _sm_gen_e = _entity_map[_key]
+    _bus_e    = _entity_map[_sub_var(_sm_name)]
+    world.connect(_sm_gen_e, _bus_e, ('P_load_mw',   'P_load_mw'))
+    world.connect(_sm_gen_e, _bus_e, ('Q_load_mvar', 'Q_load_mvar'))
 
 # ── Collector connections ─────────────────────────────────────────────────────
 # All substations (including HV-only transformer buses): voltage magnitude + angle

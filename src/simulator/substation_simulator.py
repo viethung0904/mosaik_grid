@@ -12,7 +12,7 @@ META = {
     'models': {
         'Substation': {
             'public': True,
-            'params': ['Y_self_re', 'Y_self_im', 'B_shunt', 'omega_relax', 'is_slack', 'V_slack_kv', 'V_slack_ang_deg', 'is_pv', 'V_pv_kv'],
+            'params': ['Y_self_re', 'Y_self_im', 'B_shunt', 'omega_relax', 'is_slack', 'V_slack_kv', 'V_slack_ang_deg', 'is_sync_machine', 'V_reg_kv'],
             'attrs': ['I_in_re', 'I_in_im', 'P_load_mw', 'Q_load_mvar', 'V_mag_kv', 'V_ang_deg'],
         },
     },
@@ -33,7 +33,7 @@ class Substation(mosaik_api.Simulator):
         self.step_size = 1                  # int simulation step size
         self.start_time = 0                 # FMPy parameter
         self.stop_time = 0                  # FMPy parameter
-        self.sec_per_mt = 1                 # Number of seconds of internal time per mosaik time
+        self.sec_per_mt = 60                 # Number of seconds of internal time per mosaik time
         self.fmutimes = {}                  # Keeping track of each FMU's internal time
 
     def init(self, sid, time_resolution=1.0, fmu_filename=None, instance_name=None, step_size=None,
@@ -58,7 +58,7 @@ class Substation(mosaik_api.Simulator):
 
     def create(self, num, model, Y_self_re=0.0, Y_self_im=0.0, B_shunt=0.0,
                omega_relax=0.5, is_slack=False, V_slack_kv=20.0, V_slack_ang_deg=0.0,
-               is_pv=0.0, V_pv_kv=0.0):
+               is_sync_machine=0.0, V_reg_kv=0.0):
         counter = self.eid_counters.setdefault(model, count())
         entities = []
 
@@ -91,8 +91,8 @@ class Substation(mosaik_api.Simulator):
                 fmu.setReal([self.vrs['is_slack']], [float(is_slack)])
                 fmu.setReal([self.vrs['V_slack_kv']], [V_slack_kv])
                 fmu.setReal([self.vrs['V_slack_ang_deg']], [V_slack_ang_deg])
-                fmu.setReal([self.vrs['is_pv']], [float(is_pv)])
-                fmu.setReal([self.vrs['V_pv_kv']], [float(V_pv_kv)])
+                fmu.setReal([self.vrs['is_sync_machine']], [float(is_sync_machine)])
+                fmu.setReal([self.vrs['V_reg_kv']], [float(V_reg_kv)])
 
                 fmu.exitInitializationMode()
 
@@ -118,8 +118,8 @@ class Substation(mosaik_api.Simulator):
                 fmu.setFloat64([self.vrs['is_slack']], [float(is_slack)])
                 fmu.setFloat64([self.vrs['V_slack_kv']], [V_slack_kv])
                 fmu.setFloat64([self.vrs['V_slack_ang_deg']], [V_slack_ang_deg])
-                fmu.setFloat64([self.vrs['is_pv']], [float(is_pv)])
-                fmu.setFloat64([self.vrs['V_pv_kv']], [float(V_pv_kv)])
+                fmu.setFloat64([self.vrs['is_sync_machine']], [float(is_sync_machine)])
+                fmu.setFloat64([self.vrs['V_reg_kv']], [float(V_reg_kv)])
 
                 fmu.exitInitializationMode()
 

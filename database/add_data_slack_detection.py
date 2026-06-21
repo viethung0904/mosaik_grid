@@ -16,7 +16,7 @@ Graph shape:
 
 Slack bus detection:
   Any bus whose SvVoltage.angle == 0 is flagged is_slack=True.
-  Any bus with a SynchronousMachine is flagged is_pv=True.
+  Any bus with a SynchronousMachine is flagged is_sync_machine=True.
   SvVoltage.v is stored as sv_voltage_kv for every bus.
 """
 
@@ -58,10 +58,21 @@ def _find_cgmes_files(folder):
     return _find("_Equipment"), _find("_Topology"), _find("_StateVariables")
 
 
-# Resolve CIM folder from CLI arg or use default
-_cim_folder = sys.argv[1] if len(sys.argv) > 1 else "samples/IEEE_14_feeder_NEPLAN_CIM"
-EQ_FILE, TP_FILE, SV_FILE = _find_cgmes_files(_cim_folder)
-print(f"CIM files: EQ={EQ_FILE}, TP={TP_FILE}, SV={SV_FILE}")
+# Resolve CIM source from CLI arg or use default folder
+_cim_arg = sys.argv[1] if len(sys.argv) > 1 else "samples/IEEE_14_feeder_NEPLAN_CIM_PV_Battery.xml"
+
+# Derive a human-readable scheme name from the CLI argument (folder or file).
+_scheme_raw = os.path.splitext(os.path.basename(os.path.normpath(_cim_arg)))[0]
+_SCHEME_NAME = _scheme_raw.replace('_', ' ')
+if os.path.isfile(_cim_arg) and _cim_arg.endswith(".xml"):
+    # Single combined XML file: all profiles are in one file.
+    # Each parse_*() function filters by element tag, so pointing all three
+    # file handles at the same path works transparently.
+    EQ_FILE = TP_FILE = SV_FILE = _cim_arg
+    print(f"Single-file mode: {_cim_arg}")
+else:
+    EQ_FILE, TP_FILE, SV_FILE = _find_cgmes_files(_cim_arg)
+    print(f"CIM files: EQ={EQ_FILE}, TP={TP_FILE}, SV={SV_FILE}")
 
 RDF_NS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
 CIM_NS = "http://iec.ch/TC57/2012/CIM-schema-cim16#"
@@ -111,7 +122,12 @@ def parse_equipment():
     transformers = {}       # id -> props (filled after end parsing)
     transformer_ends = {}   # end_id -> props
     loads = {}              # id -> props
+    batteries = {}          # id -> props  (PowerElectronicsConnection linked to BatteryUnit)
+    pv_units = {}           # id -> props  (PowerElectronicsConnection linked to PhotovoltaicUnit)
     sync_machines = {}      # id -> name  (voltage-regulating generators / PV buses)
+    pec_raw = {}            # pec_id -> raw PEC attributes (intermediate)
+    pv_unit_raw = {}        # unit_id -> {name, max_p, min_p}
+    bat_unit_raw = {}       # unit_id -> {name, rated_e, max_p, min_p}
 
     for elem in root:
         tag = elem.tag
@@ -161,6 +177,40 @@ def parse_equipment():
             loads[rid] = {
                 "name": _text(elem, "IdentifiedObject.name"),
                 "rdf_id": rid,
+            }
+
+        elif tag == f"{{{CIM_NS}}}PowerElectronicsConnection":
+            ctrl_elem = elem.find(f"{{{CIM_NS}}}PowerElectronicsConnection.controlMode")
+            ctrl_mode = None
+            if ctrl_elem is not None:
+                ctrl_uri = ctrl_elem.get(f"{{{RDF_NS}}}resource", "")
+                ctrl_mode = ctrl_uri.split(".")[-1] if "." in ctrl_uri else ctrl_uri
+            pec_raw[rid] = {
+                "name":         _text(elem, "IdentifiedObject.name"),
+                "_unit_id":     _resource(elem, "PowerElectronicsConnection.PowerElectronicsUnit"),
+                "rated_s":      _float(elem, "PowerElectronicsConnection.ratedS"),
+                "rated_u":      _float(elem, "PowerElectronicsConnection.ratedU"),
+                "p":            _float(elem, "PowerElectronicsConnection.p"),
+                "q":            _float(elem, "PowerElectronicsConnection.q"),
+                "max_q":        _float(elem, "PowerElectronicsConnection.maxQ"),
+                "min_q":        _float(elem, "PowerElectronicsConnection.minQ"),
+                "max_i_fault":  _float(elem, "PowerElectronicsConnection.maxIFault"),
+                "control_mode": ctrl_mode,
+            }
+
+        elif tag == f"{{{CIM_NS}}}PhotovoltaicUnit":
+            pv_unit_raw[rid] = {
+                "name":  _text(elem, "IdentifiedObject.name"),
+                "max_p": _float(elem, "PowerElectronicsUnit.maxP"),
+                "min_p": _float(elem, "PowerElectronicsUnit.minP"),
+            }
+
+        elif tag == f"{{{CIM_NS}}}BatteryUnit":
+            bat_unit_raw[rid] = {
+                "name":    _text(elem, "IdentifiedObject.name"),
+                "rated_e": _float(elem, "BatteryUnit.ratedE"),
+                "max_p":   _float(elem, "PowerElectronicsUnit.maxP"),
+                "min_p":   _float(elem, "PowerElectronicsUnit.minP"),
             }
 
         elif tag == f"{{{CIM_NS}}}PowerTransformer":
@@ -240,12 +290,37 @@ def parse_equipment():
                 if k not in skip and v is not None:
                     tr[f"{prefix}{k}"] = v
 
+    # Build pv_units and batteries from PowerElectronicsConnection → unit links.
+    # Keys are PEC IDs because Terminals point to the PEC (conducting equipment).
+    for pec_id, pec in pec_raw.items():
+        unit_id = pec.pop("_unit_id", None)
+        pec_props = {k: v for k, v in pec.items() if v is not None}
+        if unit_id in pv_unit_raw:
+            unit = pv_unit_raw[unit_id]
+            pv_units[pec_id] = {
+                "name":   unit.get("name") or pec_props.get("name"),
+                "rdf_id": pec_id,
+                "max_p":  unit.get("max_p"),
+                "min_p":  unit.get("min_p"),
+                **{k: v for k, v in pec_props.items() if k != "name"},
+            }
+        elif unit_id in bat_unit_raw:
+            unit = bat_unit_raw[unit_id]
+            batteries[pec_id] = {
+                "name":    unit.get("name") or pec_props.get("name"),
+                "rdf_id":  pec_id,
+                "rated_e": unit.get("rated_e"),
+                "max_p":   unit.get("max_p"),
+                "min_p":   unit.get("min_p"),
+                **{k: v for k, v in pec_props.items() if k != "name"},
+            }
+
     # Remove None-valued properties
     substations = {k: {pk: pv for pk, pv in v.items() if pv is not None} for k, v in substations.items()}
     lines = {k: {pk: pv for pk, pv in v.items() if pv is not None} for k, v in lines.items()}
     transformers = {k: {pk: pv for pk, pv in v.items() if pv is not None} for k, v in transformers.items()}
 
-    return substations, lines, terminals, transformers, transformer_ends, loads, sync_machines
+    return substations, lines, terminals, transformers, transformer_ends, loads, batteries, pv_units, sync_machines
 
 
 def parse_state_variables():
@@ -321,6 +396,67 @@ def parse_topology():
             terminal_to_node[tid] = node_id
 
     return terminal_to_node
+
+
+def build_battery_connections(batteries, terminals, terminal_to_node, sv_flows):
+    """
+    For each BatteryStorage, find the connected substation node via its terminal
+    and attach SvPowerFlow p/q values (operating point from load-flow results).
+
+    Returns a list of (battery_id, battery_props_dict, node_name, terminal_id).
+    """
+    battery_terminals = {}
+    for tid, term in terminals.items():
+        if term["equipment_id"] in batteries:
+            battery_terminals[term["equipment_id"]] = tid
+
+    connections = []
+    for bat_id, bat in batteries.items():
+        tid = battery_terminals.get(bat_id)
+        if tid is None:
+            continue
+        node = terminal_to_node.get(tid)
+        if node is None:
+            continue
+        flow = sv_flows.get(tid, {})
+        bat_props = {**bat, "terminal_id": tid}
+        if flow.get("p_mw") is not None:
+            bat_props["sv_p_mw"] = flow["p_mw"]
+        if flow.get("q_mvar") is not None:
+            bat_props["sv_q_mvar"] = flow["q_mvar"]
+        connections.append((bat_id, bat_props, node, tid))
+
+    return connections
+
+
+def build_pv_connections(pv_units, terminals, terminal_to_node, sv_flows):
+    """
+    For each PhotovoltaicUnit, find the connected substation node via its terminal.
+
+    Returns a list of (pv_id, pv_props_dict, node_name, terminal_id).
+    """
+    pv_terminals = {}
+    for tid, term in terminals.items():
+        if term["equipment_id"] in pv_units:
+            pv_terminals[term["equipment_id"]] = tid
+
+    connections = []
+    for pv_id, pv in pv_units.items():
+        tid = pv_terminals.get(pv_id)
+        if tid is None:
+            continue
+        node = terminal_to_node.get(tid)
+        if node is None:
+            continue
+        flow = sv_flows.get(tid, {})
+        pv_props = {**pv, "terminal_id": tid}
+        if flow.get("p_mw") is not None:
+            pv_props["sv_p_mw"] = flow["p_mw"]
+        if flow.get("q_mvar") is not None:
+            pv_props["sv_q_mvar"] = flow["q_mvar"]
+        connections.append((pv_id, pv_props, node, tid))
+
+    return connections
 
 
 def build_load_connections(loads, terminals, terminal_to_node, sv_flows):
@@ -409,13 +545,27 @@ def build_transformer_connections(transformers, transformer_ends, terminals, ter
     return connections
 
 
-def push_to_neo4j(substations, lines, connections, transformers, tr_connections, loads, load_connections):
+def push_to_neo4j(substations, lines, connections, transformers, tr_connections,
+                  loads, load_connections, batteries, battery_connections,
+                  pv_units, pv_connections, scheme_name: str = ""):
     driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
 
     with driver.session(database=NEO4J_DATABASE) as session:
         # Clear existing data
         session.execute_write(lambda tx: tx.run("MATCH (n) DETACH DELETE n"))
         print("  Cleared existing graph.")
+
+        # Write scheme metadata so visualize.py can label the legend correctly.
+        import datetime
+        session.execute_write(
+            lambda tx: tx.run(
+                "CREATE (m:GridMetadata {scheme_name: $name, source: $src, loaded_at: $ts})",
+                name=scheme_name,
+                src=_cim_arg,
+                ts=datetime.datetime.now().isoformat(timespec='seconds'),
+            )
+        )
+        print(f"  Stored GridMetadata: scheme_name={scheme_name!r}")
 
         # Batch-create Substation nodes (includes is_slack and nominal_voltage_kv)
         session.execute_write(
@@ -527,15 +677,77 @@ def push_to_neo4j(substations, lines, connections, transformers, tr_connections,
         )
         print(f"  Created {len(load_rows)} Load CONNECT_TO relationships.")
 
+        # Batch-create Battery nodes
+        if battery_connections:
+            session.execute_write(
+                lambda tx: tx.run(
+                    "UNWIND $rows AS props CREATE (n:Battery) SET n = props",
+                    rows=[bp for _, bp, _, _ in battery_connections],
+                )
+            )
+            print(f"  Created {len(battery_connections)} Battery nodes.")
+
+            # Batch-create Battery CONNECT_TO relationships (Substation → Battery)
+            bat_rows = [
+                {"node": node, "rdf_id": bat_props["rdf_id"], "tid": tid}
+                for _, bat_props, node, tid in battery_connections
+            ]
+            session.execute_write(
+                lambda tx: tx.run(
+                    """
+                    UNWIND $rows AS row
+                    MATCH (s:Substation {name: row.node})
+                    MATCH (b:Battery {rdf_id: row.rdf_id})
+                    CREATE (s)-[:CONNECT_TO {terminal_id: row.tid}]->(b)
+                    """,
+                    rows=bat_rows,
+                )
+            )
+            print(f"  Created {len(bat_rows)} Battery CONNECT_TO relationships.")
+        else:
+            print("  No Battery nodes found in CIM — skipping.")
+
+        # Batch-create PV nodes
+        if pv_connections:
+            session.execute_write(
+                lambda tx: tx.run(
+                    "UNWIND $rows AS props CREATE (n:PV) SET n = props",
+                    rows=[pp for _, pp, _, _ in pv_connections],
+                )
+            )
+            print(f"  Created {len(pv_connections)} PV nodes.")
+
+            # Batch-create PV CONNECT_TO relationships (Substation → PV)
+            pv_rows = [
+                {"node": node, "rdf_id": pv_props["rdf_id"], "tid": tid}
+                for _, pv_props, node, tid in pv_connections
+            ]
+            session.execute_write(
+                lambda tx: tx.run(
+                    """
+                    UNWIND $rows AS row
+                    MATCH (s:Substation {name: row.node})
+                    MATCH (p:PV {rdf_id: row.rdf_id})
+                    CREATE (s)-[:CONNECT_TO {terminal_id: row.tid}]->(p)
+                    """,
+                    rows=pv_rows,
+                )
+            )
+            print(f"  Created {len(pv_rows)} PV CONNECT_TO relationships.")
+        else:
+            print("  No PV nodes found in CIM — skipping.")
+
     driver.close()
 
 
 if __name__ == "__main__":
     print("Parsing Equipment XML …")
-    substations, lines, terminals, transformers, transformer_ends, loads, sync_machines = parse_equipment()
+    substations, lines, terminals, transformers, transformer_ends, loads, batteries, pv_units, sync_machines = parse_equipment()
     print(f"  {len(substations)} substations, {len(lines)} ACLineSegments, "
           f"{len(transformers)} transformers, {len(terminals)} terminals, "
-          f"{len(loads)} loads, {len(sync_machines)} SynchronousMachines")
+          f"{len(loads)} loads, {len(batteries)} Battery (PEC), "
+          f"{len(pv_units)} PV (PEC), "
+          f"{len(sync_machines)} SynchronousMachines")
 
     print("Parsing Topology XML …")
     terminal_to_node = parse_topology()
@@ -606,11 +818,11 @@ if __name__ == "__main__":
                 break
 
     for sub in substations.values():
-        sub["is_pv"] = sub.get("name") in sm_bus_names and not sub.get("is_slack", False)
-        if sub.get("is_pv"):
+        sub["is_sync_machine"] = sub.get("name") in sm_bus_names and not sub.get("is_slack", False)
+        if sub.get("is_sync_machine"):
             sub["p_gen_mw"]   = sm_bus_p_gen.get(sub["name"], 0.0)
             sub["q_gen_mvar"] = sm_bus_q_gen.get(sub["name"], 0.0)
-    print(f"  PV buses detected (SynchronousMachine): {sorted(sm_bus_names - slack_nodes)}")
+    print(f"  SynchronousMachine buses detected: {sorted(sm_bus_names - slack_nodes)}")
 
     print("Building line connections …")
     connections = build_connections(lines, terminals, terminal_to_node)
@@ -624,6 +836,29 @@ if __name__ == "__main__":
     load_connections = build_load_connections(loads, terminals, terminal_to_node, sv_flows)
     print(f"  {len(load_connections)} load connections")
 
+    print("Building battery connections …")
+    battery_connections = build_battery_connections(batteries, terminals, terminal_to_node, sv_flows)
+    print(f"  {len(battery_connections)} battery connections")
+    for _, bp, node, _ in battery_connections:
+        print(f"  Battery '{bp['name']}' at {node}: "
+              f"ratedE={bp.get('rated_e')}, "
+              f"maxP={bp.get('max_p')}, "
+              f"ratedS={bp.get('rated_s')}, "
+              f"ratedU={bp.get('rated_u')}, "
+              f"controlMode={bp.get('control_mode')}")
+
+    print("Building PV connections …")
+    pv_connections = build_pv_connections(pv_units, terminals, terminal_to_node, sv_flows)
+    print(f"  {len(pv_connections)} PV connections")
+    for _, pp, node, _ in pv_connections:
+        print(f"  PV '{pp['name']}' at {node}: "
+              f"maxP={pp.get('max_p')}, "
+              f"ratedS={pp.get('rated_s')}, "
+              f"ratedU={pp.get('rated_u')}, "
+              f"controlMode={pp.get('control_mode')}")
+
     print("Pushing to Neo4j Aura …")
-    push_to_neo4j(substations, lines, connections, transformers, tr_connections, loads, load_connections)
+    push_to_neo4j(substations, lines, connections, transformers, tr_connections,
+                  loads, load_connections, batteries, battery_connections,
+                  pv_units, pv_connections, scheme_name=_SCHEME_NAME)
     print("Done.")

@@ -41,7 +41,7 @@ class TransformerBranch(mosaik_api.Simulator):
         self.vrs           = {}
         self.step_size     = 1
         self.start_time    = 0
-        self.sec_per_mt    = 1
+        self.sec_per_mt    = 60
         self.fmutimes      = {}
 
     # ── init ─────────────────────────────────────────────────────────────────

@@ -63,7 +63,7 @@ def fetch_all_network_params():
             sub_records = session.run(
                 'MATCH (s:Substation) '
                 'RETURN s.name AS name, s.nominal_voltage_kv AS v_nom, '
-                '       s.is_slack AS is_slack, s.is_pv AS is_pv, '
+                '       s.is_slack AS is_slack, s.is_sync_machine AS is_sync_machine, '
                 '       s.sv_voltage_kv AS sv_v, s.sv_angle_deg AS sv_ang, '
                 '       s.p_gen_mw AS p_gen_mw, s.q_gen_mvar AS q_gen_mvar '
                 'ORDER BY s.name'
@@ -72,7 +72,7 @@ def fetch_all_network_params():
                 r['name']: {
                     'v_nom_kv':      r['v_nom'] if r['v_nom'] is not None else 20.0,
                     'is_slack':      bool(r['is_slack']) if r['is_slack'] is not None else False,
-                    'is_pv':         bool(r['is_pv'])    if r['is_pv']    is not None else False,
+                    'is_sync_machine': bool(r['is_sync_machine']) if r['is_sync_machine'] is not None else False,
                     'sv_voltage_kv': r['sv_v']  if r['sv_v']  is not None else None,
                     'sv_angle_deg':  r['sv_ang'] if r['sv_ang'] is not None else 0.0,
                     'p_gen_mw':      r['p_gen_mw']   if r['p_gen_mw']   is not None else 0.0,
@@ -129,7 +129,7 @@ print('Fetching network parameters from GraphDB...')
 _sub_params, _transformers, _line_params, _load_params = fetch_all_network_params()
 
 _slack_subs = {name for name, sp in _sub_params.items() if sp['is_slack']}
-_pv_subs    = {name for name, sp in _sub_params.items() if sp['is_pv']}
+_sync_machine_subs = {name for name, sp in _sub_params.items() if sp['is_sync_machine']}
 
 # LV-side buses of transformers act as voltage-controlled (slack) nodes for their
 # downstream zone.  Their operating voltage is the CIM SvVoltage reference value.
@@ -139,7 +139,7 @@ _, _, _tr_edges_pre = fetch_edges()
 _lv_slack_subs = {_tr['lv_sub'] for _tr in _tr_edges_pre if _tr['lv_sub'] not in _slack_subs}
 _all_slack_subs = _slack_subs | _lv_slack_subs
 print(f'  True slack buses (is_slack=True): {sorted(_slack_subs)}')
-print(f'  PV generator buses (is_pv=True):  {sorted(_pv_subs)}')
+print(f'  SynchronousMachine buses (is_sync_machine=True): {sorted(_sync_machine_subs)}')
 print(f'  LV transformer buses (treated as slack): {sorted(_lv_slack_subs)}')
 for _t in _transformers:
     print(f"  Transformer {_t['name']}: hv={_t.get('hv_nominal_voltage_kv')} kV / lv={_t.get('lv_nominal_voltage_kv')} kV")
@@ -293,8 +293,11 @@ if _tr_lv_only_subs:
 
 _nonslock_subs = [s for s in _all_subs if s not in _all_slack_subs]
 
-# Simulation length = number of LIM iterations
-STOP =  2000
+# Simulation length: 1440 physical steps × 60 s/step = 86400 s (24 h)
+# Each physical step runs N_LIM outer Gauss-Jacobi sweeps (network components
+# step every tick; physical components hold constant for N_LIM ticks).
+N_LIM = 5
+STOP  = 1440 * N_LIM   # = 7200 mosaik ticks total
 
 # ── Simulator config ──────────────────────────────────────────────────────────
 sim_config = {
@@ -310,17 +313,59 @@ sim_config = {
     'Load': {
         'python': 'load_simulator:Load',
     },
+    'Battery': {
+        'python': 'battery_simulator:Battery',
+    },
+    'PV': {
+        'python': 'pv_simulator:PV',
+    },
+    'CSV': {
+        'python': 'csv_reader_simulator:CSVReader',
+    },
     'Collector': {
         'python': 'collector:Collector',
     },
 }
+
+# ── Battery / PV bus: auto-resolved from Neo4j ───────────────────────────────
+def _fetch_device_bus(label: str) -> str | None:
+    """Return the Substation name connected to the first node of the given label."""
+    load_dotenv(os.path.join(PROJECT_DIR, '.env'))
+    driver = GraphDatabase.driver(
+        os.getenv('NEO4J_URI'),
+        auth=(os.getenv('NEO4J_USERNAME'), os.getenv('NEO4J_PASSWORD')),
+    )
+    try:
+        with driver.session(database=os.getenv('NEO4J_DATABASE')) as session:
+            rec = session.run(
+                f'MATCH (s:Substation)-[:CONNECT_TO]->(d:{label}) '
+                'RETURN s.name AS name ORDER BY s.name LIMIT 1'
+            ).single()
+            return rec['name'] if rec else None
+    finally:
+        driver.close()
+
+_BATTERY_BUS   = _fetch_device_bus('Battery') or 'BUS_5   69.0'
+_BATTERY_P_CHARGE = 0.030   # Charge setpoint [MW] (positive=charge, 30 kW = CIM nominalP)
+
+# PV FMU bus: derived from (Substation)-[:CONNECT_TO]->(PV) in Neo4j.
+# NOTE: is_sync_machine=True on Substation means a SynchronousMachine (voltage-regulated
+# generator) bus. The solar PV FMU bus comes from the PV node's CONNECT_TO edge.
+_PV_BUS = _fetch_device_bus('PV')
+if _PV_BUS is None:
+    raise RuntimeError('No PV node connected to any Substation in Neo4j — re-run add_data_slack_detection.py')
+print(f'  PV FMU bus (from GraphDB): {_PV_BUS}')
+print(f'  Battery bus (from GraphDB): {_BATTERY_BUS}')
+
+_PV_CSV          = os.path.join(PROJECT_DIR, 'input_data.csv')  # S [W/m²], T [K]
+_PV_SCALE_FACTOR = 10.0   # Multiply FMU output: 1×=384 kW peak, 10×=3.84 MW peak
 
 world = mosaik.World(sim_config)
 
 # ── Transformers: one entity per Transformer node in graph ────────────────────
 transformer_sim = world.start('Transformer',
     fmu_filename=os.path.join(FMU_DIR, 'TR1.fmu'),
-    instance_name='Transformer', step_size=1)
+    instance_name='Transformer', step_size=N_LIM)
 
 _entity_map = {}
 for _t in _transformers:
@@ -351,33 +396,31 @@ for _sub_name in _all_subs:
     # Use CIM operating voltage if available, else fall back to nominal
     _v_slack = _sp.get('sv_voltage_kv') or _v_nom
     _is_slack = _sub_name in _all_slack_subs
-    _is_pv    = _sub_name in _pv_subs
+    _is_sync_machine = _sub_name in _sync_machine_subs
     if _is_slack:
         _v_ang = _sp.get('sv_angle_deg', 0.0)
         _e = bus_sim.Substation.create(1, is_slack=1.0, V_slack_kv=_v_slack,
                                        V_slack_ang_deg=_v_ang)[0]
-    elif _is_pv:
+    elif _is_sync_machine:
         _yre, _yim = _y_self.get(_sub_name, (0.0, 0.0))
         _v_pv     = _sp.get('sv_voltage_kv') or _v_nom
-        # PV buses: flat start for magnitude (overridden by is_pv clamp anyway),
-        # but warm-start the angle at the CIM sv_angle reference.  This is required
-        # for isolated PV buses like BUS_8 where Y_self=0 prevents any LIM angle
-        # update, and improves convergence for connected PV buses from flat start.
-        _v_pv_ang = _sp.get('sv_angle_deg', 0.0)
+        _v_pv_ang = _sp.get('sv_angle_deg', 0.0) or 0.0
+        # Warm-start at CIM operating voltage so initial line currents are non-zero.
         _e = bus_sim.Substation.create(
             1, Y_self_re=_yre, Y_self_im=_yim,
             B_shunt=0.0, omega_relax=0.5, is_slack=0.0,
-            V_slack_kv=_v_nom / 5.0, V_slack_ang_deg=_v_pv_ang,
-            is_pv=1.0, V_pv_kv=_v_pv)[0]
+            V_slack_kv=_v_slack, V_slack_ang_deg=_v_pv_ang,
+            is_sync_machine=1.0, V_reg_kv=_v_pv)[0]
     else:
         _yre, _yim = _y_self.get(_sub_name, (0.0, 0.0))
-        # Flat start: initialise all non-slack buses at 1/5 nominal voltage, 0° angle.
+        _v_ang0 = _sp.get('sv_angle_deg', 0.0) or 0.0
+        # Warm-start at CIM operating voltage so initial line currents are non-zero.
         _e = bus_sim.Substation.create(
             1, Y_self_re=_yre, Y_self_im=_yim,
             B_shunt=0.0, omega_relax=0.5, is_slack=0.0,
-            V_slack_kv=_v_nom / 5.0, V_slack_ang_deg=0.0)[0]
+            V_slack_kv=_v_slack, V_slack_ang_deg=_v_ang0)[0]
     _entity_map[_sub_var(_sub_name)] = _e
-    print(f'  Instantiated Substation {_sub_name} (is_slack={_is_slack}, is_pv={_is_pv}, V={_v_slack} kV)')
+    print(f'  Instantiated Substation {_sub_name} (is_slack={_is_slack}, is_sync_machine={_is_sync_machine}, V={_v_slack} kV)')
 
 # ── Lines: one entity per LINE edge ───────────────────────────────────────────
 line_sim = world.start('ACLineSegment',
@@ -394,7 +437,7 @@ for _edge in _line_edges:
 # ── Loads: one entity per Load node ───────────────────────────────────────────
 load_sim = world.start('Load',
     fmu_filename=os.path.join(FMU_DIR, 'Load.fmu'),
-    instance_name='Load', step_size=1)
+    instance_name='Load', step_size=N_LIM)
 
 for _load_name, _lp in _load_params.items():
     _e = load_sim.Load.create(1, p_mw=_lp['p_mw'], q_mvar=_lp['q_mvar'])[0]
@@ -402,19 +445,41 @@ for _load_name, _lp in _load_params.items():
     print(f'  Instantiated Load {_load_name}')
 
 # ── PV bus generator injection loads ─────────────────────────────────────────
-# Each PV bus has a scheduled active power injection modelled as a negative-P
+# Each SynchronousMachine bus has a scheduled active power injection modelled as a negative-P
 # Load FMU.  The substation P_load_mw input is the sum of all connected loads
 # (real + this generator load), so net demand = P_load_direct - P_gen.
-_PV_GEN_LOAD_KEY = '__pv_gen__{}'
-for _pv_name in sorted(_pv_subs):
-    _sp = _sub_params.get(_pv_name, {})
+_SYNC_MACHINE_GEN_LOAD_KEY = '__sync_machine_gen__{}'
+for _sync_machine_name in sorted(_sync_machine_subs):
+    _sp = _sub_params.get(_sync_machine_name, {})
     _p_gen = _sp.get('p_gen_mw') or 0.0
     _q_gen = _sp.get('q_gen_mvar') or 0.0
     if abs(_p_gen) < 1e-9 and abs(_q_gen) < 1e-9:
         continue  # no injection to model
     _e = load_sim.Load.create(1, p_mw=-_p_gen, q_mvar=-_q_gen)[0]
-    _entity_map[_PV_GEN_LOAD_KEY.format(_pv_name)] = _e
-    print(f'  Instantiated PV generator injection at {_pv_name}: P_gen={_p_gen:.4f} MW, Q_gen={_q_gen:.4f} MVAr')
+    _entity_map[_SYNC_MACHINE_GEN_LOAD_KEY.format(_sync_machine_name)] = _e
+    print(f'  Instantiated SynchronousMachine injection at {_sync_machine_name}: P_gen={_p_gen:.4f} MW, Q_gen={_q_gen:.4f} MVAr')
+
+# ── Battery: one FMU instance representing Battery-1 at BUS_5 ───────────────
+battery_sim = world.start('Battery',
+    fmu_filename=os.path.join(FMU_DIR, 'Battery_Simulink_fmi3.fmu'),
+    instance_name='Battery', step_size=N_LIM)
+_battery_e = battery_sim.Battery.create(1, p_charge_mw=_BATTERY_P_CHARGE)[0]
+_entity_map['battery_1'] = _battery_e
+print(f'  Instantiated Battery-1 at {_BATTERY_BUS} (p_charge={_BATTERY_P_CHARGE} MW)')
+
+# ── CSV weather data: S [W/m²] and T [K] from input_data.csv ─────────────────
+csv_sim = world.start('CSV', step_size=N_LIM)
+_csv_e  = csv_sim.WeatherData.create(1, csv_file=_PV_CSV)[0]
+print(f'  Instantiated CSV weather reader from {_PV_CSV}')
+
+# ── PV: one FMU instance (PV-1, 50S×100P array) at BUS_14 ─────────────────────
+pv_sim = world.start('PV',
+    fmu_filename=os.path.join(FMU_DIR, 'PV_Python_fmi2.fmu'),
+    instance_name='PV_MPPT',
+    step_size=N_LIM)
+_pv_e = pv_sim.PV.create(1, scale_factor=_PV_SCALE_FACTOR)[0]
+_entity_map['pv_1'] = _pv_e
+print(f'  Instantiated PV-1 at {_PV_BUS} (S/T from {os.path.basename(_PV_CSV)}, scale={_PV_SCALE_FACTOR}x)')
 
 # ── Transformer equivalent loads at HV buses ──────────────────────────────────
 # Each transformer sinks power from its HV substation equal to the total LV-zone demand.
@@ -446,12 +511,16 @@ for _edge in _line_edges:
     _from_e  = _entity_map[_sub_var(_fs)]
     _to_e    = _entity_map[_sub_var(_ts)]
     _line_e  = _entity_map[_line_var(_fs, _ts)]
-    _v_nom_from = _sub_params.get(_fs, {}).get('v_nom_kv', 20.0)
-    _v_nom_to   = _sub_params.get(_ts, {}).get('v_nom_kv', 20.0)
-    world.connect(_from_e, _line_e, ('V_mag_kv', 'V_from_mag_kv'), time_shifted=True, initial_data={'V_mag_kv': _v_nom_from / 5.0})
-    world.connect(_from_e, _line_e, ('V_ang_deg', 'V_from_ang_deg'), time_shifted=True, initial_data={'V_ang_deg': 0.0})
-    world.connect(_to_e,   _line_e, ('V_mag_kv', 'V_to_mag_kv'),   time_shifted=True, initial_data={'V_mag_kv': _v_nom_to / 5.0})
-    world.connect(_to_e,   _line_e, ('V_ang_deg', 'V_to_ang_deg'), time_shifted=True, initial_data={'V_ang_deg': 0.0})
+    _v_init_from = (_sub_params.get(_fs, {}).get('sv_voltage_kv') or
+                     _sub_params.get(_fs, {}).get('v_nom_kv', 20.0))
+    _v_init_to   = (_sub_params.get(_ts, {}).get('sv_voltage_kv') or
+                     _sub_params.get(_ts, {}).get('v_nom_kv', 20.0))
+    _ang_init_from = _sub_params.get(_fs, {}).get('sv_angle_deg', 0.0) or 0.0
+    _ang_init_to   = _sub_params.get(_ts, {}).get('sv_angle_deg', 0.0) or 0.0
+    world.connect(_from_e, _line_e, ('V_mag_kv', 'V_from_mag_kv'), time_shifted=True, initial_data={'V_mag_kv': _v_init_from})
+    world.connect(_from_e, _line_e, ('V_ang_deg', 'V_from_ang_deg'), time_shifted=True, initial_data={'V_ang_deg': _ang_init_from})
+    world.connect(_to_e,   _line_e, ('V_mag_kv', 'V_to_mag_kv'),   time_shifted=True, initial_data={'V_mag_kv': _v_init_to})
+    world.connect(_to_e,   _line_e, ('V_ang_deg', 'V_to_ang_deg'), time_shifted=True, initial_data={'V_ang_deg': _ang_init_to})
     world.connect(_line_e, _to_e,   ('I_to_re', 'I_in_re'))
     world.connect(_line_e, _to_e,   ('I_to_im', 'I_in_im'))
     # Backward injection: current leaving from-bus via this branch (KCL)
@@ -475,15 +544,26 @@ for _hv_bus in _hv_tr_equiv:
     world.connect(_te_e, _hv_e, ('P_load_mw',   'P_load_mw'))
     world.connect(_te_e, _hv_e, ('Q_load_mvar', 'Q_load_mvar'))
 
-# PV generator injection loads: negative-P source at each PV bus
-for _pv_name in sorted(_pv_subs):
-    _key = _PV_GEN_LOAD_KEY.format(_pv_name)
+# SynchronousMachine injection loads: negative-P source at each SynchronousMachine bus
+for _sync_machine_name in sorted(_sync_machine_subs):
+    _key = _SYNC_MACHINE_GEN_LOAD_KEY.format(_sync_machine_name)
     if _key not in _entity_map:
         continue
-    _pv_gen_e = _entity_map[_key]
-    _bus_e    = _entity_map[_sub_var(_pv_name)]
-    world.connect(_pv_gen_e, _bus_e, ('P_load_mw',   'P_load_mw'))
-    world.connect(_pv_gen_e, _bus_e, ('Q_load_mvar', 'Q_load_mvar'))
+    _sync_machine_gen_e = _entity_map[_key]
+    _bus_e              = _entity_map[_sub_var(_sync_machine_name)]
+    world.connect(_sync_machine_gen_e, _bus_e, ('P_load_mw',   'P_load_mw'))
+    world.connect(_sync_machine_gen_e, _bus_e, ('Q_load_mvar', 'Q_load_mvar'))
+
+# Battery: P injection at auto-resolved bus (negative P_load_mw = discharge into grid)
+world.connect(_battery_e, _entity_map[_sub_var(_BATTERY_BUS)],
+              ('P_load_mw', 'P_load_mw'))
+
+# CSV weather → PV irradiance and temperature inputs
+world.connect(_csv_e, _pv_e, ('S', 'S'), ('T', 'T'))
+
+# PV: P injection at auto-resolved bus from GraphDB (negative P_load_mw = generation into grid)
+world.connect(_pv_e, _entity_map[_sub_var(_PV_BUS)],
+              ('P_load_mw', 'P_load_mw'))
 
 # ── Collector connections ─────────────────────────────────────────────────────
 # All substations (including HV-only transformer buses): voltage magnitude + angle
@@ -502,6 +582,18 @@ for _edge in _line_edges:
 for _t in _transformers:
     _tv = _tr_var(_t['name'])
     world.connect(_entity_map[_tv], collector, ('V2', f'V_{_tv}_LV'))
+
+# Battery SOC, voltage, current and power monitoring
+world.connect(_battery_e, collector, ('SOC',       'Battery1_SOC'))
+world.connect(_battery_e, collector, ('P_load_mw', 'Battery1_P_load_mw'))
+world.connect(_battery_e, collector, ('V_volt',    'Battery1_V_volt'))
+world.connect(_battery_e, collector, ('I_amp',     'Battery1_I_amp'))
+
+# PV power, voltage, current monitoring
+world.connect(_pv_e, collector, ('P_load_mw', 'PV1_P_load_mw'))
+world.connect(_pv_e, collector, ('P',         'PV1_P_W'))
+world.connect(_pv_e, collector, ('V',         'PV1_V_volt'))
+world.connect(_pv_e, collector, ('I',         'PV1_I_amp'))
 
 # Branch currents — from-side and to-side magnitude for all lines
 for _edge in _line_edges:
@@ -545,14 +637,29 @@ try:
             return [], []
         d = data[key]
         times = sorted(d.keys(), key=int)
-        return [int(t) for t in times], [d[t] for t in times]
+        # Keep only the last outer sweep of each physical time step
+        # (tick t is the last sweep when (t + 1) % N_LIM == 0).
+        # Map mosaik tick → physical time in seconds: t_s = (t // N_LIM) * 60
+        phys_t, vals = [], []
+        for t_str in times:
+            t = int(t_str)
+            if (t + 1) % N_LIM == 0:
+                phys_t.append((t // N_LIM) * 60)
+                vals.append(d[t_str])
+        if not phys_t:          # component stepped less frequently — use as-is
+            phys_t = [(int(t) // N_LIM) * 60 for t in times]
+            vals   = [d[t] for t in times]
+        return phys_t, vals
 
-    fig = make_subplots(rows=4, cols=1, shared_xaxes=True,
+    fig = make_subplots(rows=7, cols=1, shared_xaxes=True,
         subplot_titles=[
-            '|V| Bus Voltages (kV) vs LIM iteration',
-            'Voltage Angle (deg) vs LIM iteration',
+            '|V| Bus Voltages (kV) — 24h simulation',
+            'Voltage Angle (deg) — 24h simulation',
             'Line Active Power Losses (MW)',
             'Branch Current Magnitudes (kA)',
+            'Battery-1: State of Charge (%)',
+            'Battery-1: Terminal Voltage (V)',
+            'Battery-1: Charge / Discharge Power (MW)',
         ])
 
     # Row 1: bus voltage magnitudes — all substations
@@ -583,12 +690,39 @@ try:
         fig.add_trace(go.Scatter(x=t, y=v,
                                  name=f'I {_edge["from_sub"]}→{_edge["to_sub"]}'), row=4, col=1)
 
-    fig.update_xaxes(title_text='LIM iteration', row=4, col=1)
-    fig.update_yaxes(title_text='|V| (kV)', row=1, col=1)
-    fig.update_yaxes(title_text='angle (deg)', row=2, col=1)
-    fig.update_yaxes(title_text='P_loss (MW)', row=3, col=1)
-    fig.update_yaxes(title_text='|I| (kA)', row=4, col=1)
-    fig.update_layout(title_text='LIM Co-simulation: MV Network Power Flow (generic slack)', hovermode='x unified')
+    # Row 5: Battery SOC
+    t, v = series('Battery1_SOC')
+    if t:
+        fig.add_trace(go.Scatter(x=t, y=v, name='SOC (%)',
+                                 line=dict(color='green')), row=5, col=1)
+
+    # Row 6: Battery terminal voltage
+    t, v = series('Battery1_V_volt')
+    if t:
+        fig.add_trace(go.Scatter(x=t, y=v, name='Voltage (V)',
+                                 line=dict(color='orange')), row=6, col=1)
+
+    # Row 7: Charge power (P_load_mw > 0) and discharge power (P_load_mw < 0)
+    t, v = series('Battery1_P_load_mw')
+    if t:
+        p_charge    = [max(p, 0.0) for p in v]
+        p_discharge = [abs(min(p, 0.0)) for p in v]
+        fig.add_trace(go.Scatter(x=t, y=p_charge,
+                                 name='Charge power (MW)',
+                                 line=dict(color='blue')), row=7, col=1)
+        fig.add_trace(go.Scatter(x=t, y=p_discharge,
+                                 name='Discharge power (MW)',
+                                 line=dict(color='red', dash='dot')), row=7, col=1)
+
+    fig.update_xaxes(title_text='Physical time (s)', row=7, col=1)
+    fig.update_yaxes(title_text='|V| (kV)',     row=1, col=1)
+    fig.update_yaxes(title_text='angle (deg)',  row=2, col=1)
+    fig.update_yaxes(title_text='P_loss (MW)',  row=3, col=1)
+    fig.update_yaxes(title_text='|I| (kA)',     row=4, col=1)
+    fig.update_yaxes(title_text='SOC (%)',      row=5, col=1)
+    fig.update_yaxes(title_text='V (V)',        row=6, col=1)
+    fig.update_yaxes(title_text='Power (MW)',   row=7, col=1)
+    fig.update_layout(title_text='NR Co-simulation: IEEE 14-bus Power Flow — 24h quasi-static', hovermode='x unified')
     out_html = os.path.join(PROJECT_DIR, 'output.html')
     fig.write_html(out_html)
     print(f'Visualization saved to {out_html}')

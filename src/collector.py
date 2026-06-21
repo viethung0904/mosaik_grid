@@ -9,6 +9,7 @@ import csv
 import signal
 import sys
 import atexit
+import datetime as _dt
 import time as _wall_time
 import mosaik_api
 import pandas as pd
@@ -74,14 +75,10 @@ class Collector(mosaik_api.Simulator):
     def init(self, sid, time_resolution, output_dir='.', total_steps=None):
         self.output_dir  = output_dir
         self.total_steps = total_steps
-        # Read start_time written by scenario.py so we can preserve it
-        self._start_time = None
-        try:
-            _sp = os.path.join(output_dir, 'sim_status.json')
-            with open(_sp) as _f:
-                self._start_time = json.load(_f).get('start_time')
-        except Exception:
-            pass
+        # Record the actual wall-clock start time of this run so the live
+        # dashboard x-axis always reflects the current simulation, not a
+        # stale value from a previous run's sim_status.json.
+        self._start_time = _dt.datetime.now().isoformat()
         return self.meta
 
     def create(self, num, model):

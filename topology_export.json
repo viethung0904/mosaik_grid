@@ -1,0 +1,1053 @@
+{
+  "scheme_name": "IEEE 14 feeder NEPLAN CIM PV Battery",
+  "summary": {
+    "node_count": 32,
+    "edge_count": 38,
+    "node_type_counts": {
+      "Battery": 1,
+      "Load": 12,
+      "PV": 1,
+      "Substation": 14,
+      "Transformer": 4
+    },
+    "relationship_type_counts": {
+      "CONNECT_TO": 22,
+      "LINE": 16
+    }
+  },
+  "nodes": [
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:92",
+      "label": "LDBUS_3   69.0",
+      "type": "Load",
+      "properties": {
+        "name": "LDBUS_3   69.0",
+        "q_mvar": 19.0,
+        "p_mw": 94.2,
+        "terminal_id": "E-707",
+        "rdf_id": "LDBUS_3   69.0"
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:84",
+      "label": "LDBUS_2   69.0",
+      "type": "Load",
+      "properties": {
+        "name": "LDBUS_2   69.0",
+        "q_mvar": 12.7,
+        "p_mw": 21.7,
+        "terminal_id": "E-699",
+        "rdf_id": "LDBUS_2   69.0"
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:82",
+      "label": "BRANCH-14",
+      "type": "Transformer",
+      "properties": {
+        "hv_b": 0.0,
+        "hv_x0_ohm": 0.0,
+        "hv_x_ohm": 0.0,
+        "hv_grounded": "true",
+        "hv_nominal_voltage_kv": 18.0,
+        "lv_nominal_voltage_kv": 13.8,
+        "hv_r0_ohm": 0.0,
+        "hv_connection_kind": "Y",
+        "lv_rated_s_mva": 100.0,
+        "hv_rated_u_kv": 18.0,
+        "lv_x0_ohm": 0.0,
+        "lv_grounded": "true",
+        "lv_connection_kind": "Y",
+        "lv_phase_angle_clock": 0.0,
+        "name": "BRANCH-14",
+        "lv_rated_u_kv": 13.8,
+        "lv_x_ohm": 0.33546,
+        "hv_phase_angle_clock": 0.0,
+        "lv_r0_ohm": 0.0,
+        "hv_rated_s_mva": 100.0,
+        "rdf_id": "BRANCH-14",
+        "hv_r_ohm": 0.0,
+        "lv_b": 0.0,
+        "lv_r_ohm": 0.0
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:76",
+      "label": "BUS_14  13.8",
+      "type": "Substation",
+      "properties": {
+        "is_slack": false,
+        "is_sync_machine": false,
+        "nominal_voltage_kv": 13.8,
+        "name": "BUS_14  13.8",
+        "region": "Zone 1",
+        "sv_voltage_kv": 14.0764,
+        "rdf_id": "_3FA2-2E-F1-00000000000000343138",
+        "sv_angle_deg": -16.0552
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:32",
+      "label": "BUS_2   69.0",
+      "type": "Substation",
+      "properties": {
+        "is_slack": false,
+        "p_gen_mw": 40.0,
+        "is_sync_machine": true,
+        "nominal_voltage_kv": 69.0,
+        "q_gen_mvar": 49.15658,
+        "name": "BUS_2   69.0",
+        "region": "Zone 1",
+        "sv_voltage_kv": 72.105,
+        "rdf_id": "_3FA2-2E-F1-00000000000000343037",
+        "sv_angle_deg": -4.99108
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:78",
+      "label": "BUS_8   18.0",
+      "type": "Substation",
+      "properties": {
+        "is_slack": false,
+        "p_gen_mw": 0.0,
+        "is_sync_machine": true,
+        "nominal_voltage_kv": 18.0,
+        "q_gen_mvar": 24.0,
+        "name": "BUS_8   18.0",
+        "region": "Zone 1",
+        "sv_voltage_kv": 19.56076,
+        "rdf_id": "_3FA2-2E-F1-00000000000000343230",
+        "sv_angle_deg": -13.2253
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:96",
+      "label": "PV-1",
+      "type": "PV",
+      "properties": {
+        "rated_u": 13.8,
+        "control_mode": "constantPowerFactor",
+        "rated_s": 361.1,
+        "p": 361.1,
+        "q": 0.0,
+        "min_p": 0.0,
+        "min_q": -90.275,
+        "name": "PV-1",
+        "max_p": 361.1,
+        "max_q": 90.275,
+        "max_i_fault": 1.1111111,
+        "terminal_id": "E-901",
+        "rdf_id": "PVBUS_14  13.8"
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:66",
+      "label": "BUS_3   69.0",
+      "type": "Substation",
+      "properties": {
+        "is_slack": false,
+        "p_gen_mw": 0.0,
+        "is_sync_machine": true,
+        "nominal_voltage_kv": 69.0,
+        "q_gen_mvar": 27.578087,
+        "name": "BUS_3   69.0",
+        "region": "Zone 1",
+        "sv_voltage_kv": 69.69,
+        "rdf_id": "_3FA2-2E-F1-00000000000000343038",
+        "sv_angle_deg": -12.7601
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:95",
+      "label": "Battery-1",
+      "type": "Battery",
+      "properties": {
+        "rated_u": 400.0,
+        "control_mode": "constantPowerFactor",
+        "rated_s": 50.0,
+        "p": 30.0,
+        "q": 40.0,
+        "min_p": -30.0,
+        "rated_e": 5000.0,
+        "min_q": -40.0,
+        "name": "Battery-1",
+        "max_p": 30.0,
+        "max_q": 40.0,
+        "max_i_fault": 1.1111111,
+        "terminal_id": "E-101",
+        "rdf_id": "LDBUS_0   69.0"
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:81",
+      "label": "BRANCH-8",
+      "type": "Transformer",
+      "properties": {
+        "hv_b": 0.0,
+        "hv_x0_ohm": 0.0,
+        "hv_x_ohm": 9.522949,
+        "hv_grounded": "true",
+        "hv_nominal_voltage_kv": 69.0,
+        "lv_nominal_voltage_kv": 13.8,
+        "hv_r0_ohm": 0.0,
+        "hv_connection_kind": "Y",
+        "lv_rated_s_mva": 100.0,
+        "hv_rated_u_kv": 67.482,
+        "lv_x0_ohm": 0.0,
+        "lv_grounded": "true",
+        "lv_connection_kind": "Y",
+        "lv_phase_angle_clock": 0.0,
+        "name": "BRANCH-8",
+        "lv_rated_u_kv": 13.8,
+        "lv_x_ohm": 0.0,
+        "hv_phase_angle_clock": 0.0,
+        "lv_r0_ohm": 0.0,
+        "hv_rated_s_mva": 100.0,
+        "rdf_id": "BRANCH-8",
+        "hv_r_ohm": 0.0,
+        "lv_b": 0.0,
+        "lv_r_ohm": 0.0
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:68",
+      "label": "BUS_5   69.0",
+      "type": "Substation",
+      "properties": {
+        "is_slack": false,
+        "is_sync_machine": false,
+        "nominal_voltage_kv": 69.0,
+        "name": "BUS_5   69.0",
+        "region": "Zone 1",
+        "sv_voltage_kv": 70.0897,
+        "rdf_id": "_3FA2-2E-F1-00000000000000343130",
+        "sv_angle_deg": -8.74948
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:89",
+      "label": "LDBUS_9   13.8",
+      "type": "Load",
+      "properties": {
+        "name": "LDBUS_9   13.8",
+        "q_mvar": 16.6,
+        "p_mw": 29.5,
+        "terminal_id": "E-713",
+        "rdf_id": "LDBUS_9   13.8"
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:83",
+      "label": "LDBUS_6   13.8",
+      "type": "Load",
+      "properties": {
+        "name": "LDBUS_6   13.8",
+        "q_mvar": 7.5,
+        "p_mw": 11.2,
+        "terminal_id": "E-701",
+        "rdf_id": "LDBUS_6   13.8"
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:88",
+      "label": "LDBUS_7   13.8",
+      "type": "Load",
+      "properties": {
+        "name": "LDBUS_7   13.8",
+        "q_mvar": 0.0,
+        "p_mw": 0.0,
+        "terminal_id": "E-715",
+        "rdf_id": "LDBUS_7   13.8"
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:80",
+      "label": "BRANCH-10",
+      "type": "Transformer",
+      "properties": {
+        "hv_b": 0.0,
+        "hv_x0_ohm": 0.0,
+        "hv_x_ohm": 10.422335,
+        "hv_grounded": "true",
+        "hv_nominal_voltage_kv": 69.0,
+        "lv_nominal_voltage_kv": 13.8,
+        "hv_r0_ohm": 0.0,
+        "hv_connection_kind": "Y",
+        "lv_rated_s_mva": 100.0,
+        "hv_rated_u_kv": 64.308,
+        "lv_x0_ohm": 0.0,
+        "lv_grounded": "true",
+        "lv_connection_kind": "Y",
+        "lv_phase_angle_clock": 0.0,
+        "name": "BRANCH-10",
+        "lv_rated_u_kv": 13.8,
+        "lv_x_ohm": 0.0,
+        "hv_phase_angle_clock": 0.0,
+        "lv_r0_ohm": 0.0,
+        "hv_rated_s_mva": 100.0,
+        "rdf_id": "BRANCH-10",
+        "hv_r_ohm": 0.0,
+        "lv_b": 0.0,
+        "lv_r_ohm": 0.0
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:67",
+      "label": "BUS_1   69.0",
+      "type": "Substation",
+      "properties": {
+        "is_slack": true,
+        "is_sync_machine": false,
+        "nominal_voltage_kv": 69.0,
+        "name": "BUS_1   69.0",
+        "region": "Zone 1",
+        "sv_voltage_kv": 73.14,
+        "rdf_id": "_3FA2-2E-F1-00000000000000343039",
+        "sv_angle_deg": 0.0
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:70",
+      "label": "BUS_6   13.8",
+      "type": "Substation",
+      "properties": {
+        "is_slack": false,
+        "p_gen_mw": 0.0,
+        "is_sync_machine": true,
+        "nominal_voltage_kv": 13.8,
+        "q_gen_mvar": 22.979146,
+        "name": "BUS_6   13.8",
+        "region": "Zone 1",
+        "sv_voltage_kv": 14.766,
+        "rdf_id": "_3FA2-2E-F1-00000000000000343132",
+        "sv_angle_deg": -14.4257
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:73",
+      "label": "BUS_11  13.8",
+      "type": "Substation",
+      "properties": {
+        "is_slack": false,
+        "is_sync_machine": false,
+        "nominal_voltage_kv": 13.8,
+        "name": "BUS_11  13.8",
+        "region": "Zone 1",
+        "sv_voltage_kv": 14.44355,
+        "rdf_id": "_3FA2-2E-F1-00000000000000343135",
+        "sv_angle_deg": -14.8415
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:74",
+      "label": "BUS_10  13.8",
+      "type": "Substation",
+      "properties": {
+        "is_slack": false,
+        "is_sync_machine": false,
+        "nominal_voltage_kv": 13.8,
+        "name": "BUS_10  13.8",
+        "region": "Zone 1",
+        "sv_voltage_kv": 14.22641,
+        "rdf_id": "_3FA2-2E-F1-00000000000000343136",
+        "sv_angle_deg": -15.023
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:69",
+      "label": "BUS_4   69.0",
+      "type": "Substation",
+      "properties": {
+        "is_slack": false,
+        "is_sync_machine": false,
+        "nominal_voltage_kv": 69.0,
+        "name": "BUS_4   69.0",
+        "region": "Zone 1",
+        "sv_voltage_kv": 69.80303,
+        "rdf_id": "_3FA2-2E-F1-00000000000000343131",
+        "sv_angle_deg": -10.2223
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:79",
+      "label": "BRANCH-9",
+      "type": "Transformer",
+      "properties": {
+        "hv_b": 0.0,
+        "hv_x0_ohm": 0.0,
+        "hv_x_ohm": 24.863434,
+        "hv_grounded": "true",
+        "hv_nominal_voltage_kv": 69.0,
+        "lv_nominal_voltage_kv": 13.8,
+        "hv_r0_ohm": 0.0,
+        "hv_connection_kind": "Y",
+        "lv_rated_s_mva": 100.0,
+        "hv_rated_u_kv": 66.861,
+        "lv_x0_ohm": 0.0,
+        "lv_grounded": "true",
+        "lv_connection_kind": "Y",
+        "lv_phase_angle_clock": 0.0,
+        "name": "BRANCH-9",
+        "lv_rated_u_kv": 13.8,
+        "lv_x_ohm": 0.0,
+        "hv_phase_angle_clock": 0.0,
+        "lv_r0_ohm": 0.0,
+        "hv_rated_s_mva": 100.0,
+        "rdf_id": "BRANCH-9",
+        "hv_r_ohm": 0.0,
+        "lv_b": 0.0,
+        "lv_r_ohm": 0.0
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:93",
+      "label": "LDBUS_4   69.0",
+      "type": "Load",
+      "properties": {
+        "name": "LDBUS_4   69.0",
+        "q_mvar": 4.0,
+        "p_mw": 47.8,
+        "terminal_id": "E-705",
+        "rdf_id": "LDBUS_4   69.0"
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:90",
+      "label": "LDBUS_10  13.8",
+      "type": "Load",
+      "properties": {
+        "name": "LDBUS_10  13.8",
+        "q_mvar": 5.8,
+        "p_mw": 9.0,
+        "terminal_id": "E-711",
+        "rdf_id": "LDBUS_10  13.8"
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:85",
+      "label": "LDBUS_12  13.8",
+      "type": "Load",
+      "properties": {
+        "name": "LDBUS_12  13.8",
+        "q_mvar": 1.6,
+        "p_mw": 6.1,
+        "terminal_id": "E-721",
+        "rdf_id": "LDBUS_12  13.8"
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:87",
+      "label": "LDBUS_14  13.8",
+      "type": "Load",
+      "properties": {
+        "name": "LDBUS_14  13.8",
+        "q_mvar": 5.0,
+        "p_mw": 14.9,
+        "terminal_id": "E-717",
+        "rdf_id": "LDBUS_14  13.8"
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:94",
+      "label": "LDBUS_5   69.0",
+      "type": "Load",
+      "properties": {
+        "name": "LDBUS_5   69.0",
+        "q_mvar": 1.6,
+        "p_mw": 7.6,
+        "terminal_id": "E-703",
+        "rdf_id": "LDBUS_5   69.0"
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:86",
+      "label": "LDBUS_13  13.8",
+      "type": "Load",
+      "properties": {
+        "name": "LDBUS_13  13.8",
+        "q_mvar": 5.8,
+        "p_mw": 13.5,
+        "terminal_id": "E-719",
+        "rdf_id": "LDBUS_13  13.8"
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:75",
+      "label": "BUS_9   13.8",
+      "type": "Substation",
+      "properties": {
+        "is_slack": false,
+        "is_sync_machine": false,
+        "nominal_voltage_kv": 13.8,
+        "name": "BUS_9   13.8",
+        "region": "Zone 1",
+        "sv_voltage_kv": 14.23756,
+        "rdf_id": "_3FA2-2E-F1-00000000000000343137",
+        "sv_angle_deg": -14.8086
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:71",
+      "label": "BUS_13  13.8",
+      "type": "Substation",
+      "properties": {
+        "is_slack": false,
+        "is_sync_machine": false,
+        "nominal_voltage_kv": 13.8,
+        "name": "BUS_13  13.8",
+        "region": "Zone 1",
+        "sv_voltage_kv": 14.446,
+        "rdf_id": "_3FA2-2E-F1-00000000000000343133",
+        "sv_angle_deg": -15.3115
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:77",
+      "label": "BUS_7   13.8",
+      "type": "Substation",
+      "properties": {
+        "is_slack": false,
+        "is_sync_machine": false,
+        "nominal_voltage_kv": 13.8,
+        "name": "BUS_7   13.8",
+        "region": "Zone 1",
+        "sv_voltage_kv": 14.45973,
+        "rdf_id": "_3FA2-2E-F1-00000000000000343139",
+        "sv_angle_deg": -13.2253
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:91",
+      "label": "LDBUS_11  13.8",
+      "type": "Load",
+      "properties": {
+        "name": "LDBUS_11  13.8",
+        "q_mvar": 1.8,
+        "p_mw": 3.5,
+        "terminal_id": "E-709",
+        "rdf_id": "LDBUS_11  13.8"
+      }
+    },
+    {
+      "id": "4:96a693de-39f5-4572-bfda-49cef4437a94:72",
+      "label": "BUS_12  13.8",
+      "type": "Substation",
+      "properties": {
+        "is_slack": false,
+        "is_sync_machine": false,
+        "nominal_voltage_kv": 13.8,
+        "name": "BUS_12  13.8",
+        "region": "Zone 1",
+        "sv_voltage_kv": 14.5362,
+        "rdf_id": "_3FA2-2E-F1-00000000000000343134",
+        "sv_angle_deg": -15.2758
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:32",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:84",
+      "type": "CONNECT_TO",
+      "properties": {
+        "terminal_id": "E-699"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:32",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:66",
+      "type": "LINE",
+      "properties": {
+        "length_km": 1.0,
+        "nominal_voltage_kv": 69.0,
+        "bch": 0.0009199746,
+        "to_terminal_id": "E-423",
+        "x_ohm": 9.425351,
+        "r0_ohm": 0.0,
+        "short_circuit_end_temp_c": 80.0,
+        "r_ohm": 2.237193,
+        "name": "BRANCH-3",
+        "x0_ohm": 0.0,
+        "from_terminal_id": "E-422",
+        "b0ch": 0.0,
+        "rdf_id": "BRANCH-3"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:32",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:68",
+      "type": "LINE",
+      "properties": {
+        "length_km": 1.0,
+        "nominal_voltage_kv": 69.0,
+        "bch": 0.0007141355,
+        "to_terminal_id": "E-438",
+        "x_ohm": 8.278426,
+        "r0_ohm": 0.0,
+        "short_circuit_end_temp_c": 80.0,
+        "r_ohm": 2.711389,
+        "name": "BRANCH-5",
+        "x0_ohm": 0.0,
+        "from_terminal_id": "E-437",
+        "b0ch": 0.0,
+        "rdf_id": "BRANCH-5"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:32",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:69",
+      "type": "LINE",
+      "properties": {
+        "length_km": 1.0,
+        "nominal_voltage_kv": 69.0,
+        "bch": 0.000785549,
+        "to_terminal_id": "E-441",
+        "x_ohm": 8.394595,
+        "r0_ohm": 0.0,
+        "short_circuit_end_temp_c": 80.0,
+        "r_ohm": 2.766617,
+        "name": "BRANCH-4",
+        "x0_ohm": 0.0,
+        "from_terminal_id": "E-440",
+        "b0ch": 0.0,
+        "rdf_id": "BRANCH-4"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:66",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:92",
+      "type": "CONNECT_TO",
+      "properties": {
+        "terminal_id": "E-707"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:66",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:69",
+      "type": "LINE",
+      "properties": {
+        "length_km": 1.0,
+        "nominal_voltage_kv": 69.0,
+        "bch": 0.000726738,
+        "to_terminal_id": "E-435",
+        "x_ohm": 8.142738,
+        "r0_ohm": 0.0,
+        "short_circuit_end_temp_c": 80.0,
+        "r_ohm": 3.190346,
+        "name": "BRANCH-6",
+        "x0_ohm": 0.0,
+        "from_terminal_id": "E-434",
+        "b0ch": 0.0,
+        "rdf_id": "BRANCH-6"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:67",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:32",
+      "type": "LINE",
+      "properties": {
+        "length_km": 1.0,
+        "nominal_voltage_kv": 69.0,
+        "bch": 0.0011090105,
+        "to_terminal_id": "E-429",
+        "x_ohm": 2.817083,
+        "r0_ohm": 0.0,
+        "short_circuit_end_temp_c": 80.0,
+        "r_ohm": 0.922681,
+        "name": "BRANCH-1",
+        "x0_ohm": 0.0,
+        "from_terminal_id": "E-428",
+        "b0ch": 0.0,
+        "rdf_id": "BRANCH-1"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:67",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:68",
+      "type": "LINE",
+      "properties": {
+        "length_km": 1.0,
+        "nominal_voltage_kv": 69.0,
+        "bch": 0.0010333961,
+        "to_terminal_id": "E-426",
+        "x_ohm": 10.61893,
+        "r0_ohm": 0.0,
+        "short_circuit_end_temp_c": 80.0,
+        "r_ohm": 2.572368,
+        "name": "BRANCH-2",
+        "x0_ohm": 0.0,
+        "from_terminal_id": "E-425",
+        "b0ch": 0.0,
+        "rdf_id": "BRANCH-2"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:68",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:80",
+      "type": "CONNECT_TO",
+      "properties": {
+        "side": "HV",
+        "terminal_id": "E-566"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:68",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:94",
+      "type": "CONNECT_TO",
+      "properties": {
+        "terminal_id": "E-703"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:68",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:95",
+      "type": "CONNECT_TO",
+      "properties": {
+        "terminal_id": "E-101"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:69",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:79",
+      "type": "CONNECT_TO",
+      "properties": {
+        "side": "HV",
+        "terminal_id": "E-570"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:69",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:81",
+      "type": "CONNECT_TO",
+      "properties": {
+        "side": "HV",
+        "terminal_id": "E-562"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:69",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:93",
+      "type": "CONNECT_TO",
+      "properties": {
+        "terminal_id": "E-705"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:69",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:68",
+      "type": "LINE",
+      "properties": {
+        "length_km": 1.0,
+        "nominal_voltage_kv": 69.0,
+        "bch": 0.0002688509,
+        "to_terminal_id": "E-432",
+        "x_ohm": 2.004857,
+        "r0_ohm": 0.0,
+        "short_circuit_end_temp_c": 80.0,
+        "r_ohm": 0.635593,
+        "name": "BRANCH-7",
+        "x0_ohm": 0.0,
+        "from_terminal_id": "E-431",
+        "b0ch": 0.0,
+        "rdf_id": "BRANCH-7"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:70",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:83",
+      "type": "CONNECT_TO",
+      "properties": {
+        "terminal_id": "E-701"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:70",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:71",
+      "type": "LINE",
+      "properties": {
+        "length_km": 1.0,
+        "nominal_voltage_kv": 13.8,
+        "bch": 0.0,
+        "to_terminal_id": "E-444",
+        "x_ohm": 0.248086,
+        "r0_ohm": 0.0,
+        "short_circuit_end_temp_c": 80.0,
+        "r_ohm": 0.125976,
+        "name": "BRANCH-13",
+        "x0_ohm": 0.0,
+        "from_terminal_id": "E-443",
+        "b0ch": 0.0,
+        "rdf_id": "BRANCH-13"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:70",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:72",
+      "type": "LINE",
+      "properties": {
+        "length_km": 1.0,
+        "nominal_voltage_kv": 13.8,
+        "bch": 0.0,
+        "to_terminal_id": "E-447",
+        "x_ohm": 0.487164,
+        "r0_ohm": 0.0,
+        "short_circuit_end_temp_c": 80.0,
+        "r_ohm": 0.234069,
+        "name": "BRANCH-12",
+        "x0_ohm": 0.0,
+        "from_terminal_id": "E-446",
+        "b0ch": 0.0,
+        "rdf_id": "BRANCH-12"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:70",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:73",
+      "type": "LINE",
+      "properties": {
+        "length_km": 1.0,
+        "nominal_voltage_kv": 13.8,
+        "bch": 0.0,
+        "to_terminal_id": "E-450",
+        "x_ohm": 0.378785,
+        "r0_ohm": 0.0,
+        "short_circuit_end_temp_c": 80.0,
+        "r_ohm": 0.180879,
+        "name": "BRANCH-11",
+        "x0_ohm": 0.0,
+        "from_terminal_id": "E-449",
+        "b0ch": 0.0,
+        "rdf_id": "BRANCH-11"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:71",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:86",
+      "type": "CONNECT_TO",
+      "properties": {
+        "terminal_id": "E-719"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:71",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:76",
+      "type": "LINE",
+      "properties": {
+        "length_km": 1.0,
+        "nominal_voltage_kv": 13.8,
+        "bch": 0.0,
+        "to_terminal_id": "E-468",
+        "x_ohm": 0.662769,
+        "r0_ohm": 0.0,
+        "short_circuit_end_temp_c": 80.0,
+        "r_ohm": 0.325519,
+        "name": "BRANCH-20",
+        "x0_ohm": 0.0,
+        "from_terminal_id": "E-467",
+        "b0ch": 0.0,
+        "rdf_id": "BRANCH-20"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:72",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:85",
+      "type": "CONNECT_TO",
+      "properties": {
+        "terminal_id": "E-721"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:72",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:71",
+      "type": "LINE",
+      "properties": {
+        "length_km": 1.0,
+        "nominal_voltage_kv": 13.8,
+        "bch": 0.0,
+        "to_terminal_id": "E-453",
+        "x_ohm": 0.380651,
+        "r0_ohm": 0.0,
+        "short_circuit_end_temp_c": 80.0,
+        "r_ohm": 0.42072,
+        "name": "BRANCH-19",
+        "x0_ohm": 0.0,
+        "from_terminal_id": "E-452",
+        "b0ch": 0.0,
+        "rdf_id": "BRANCH-19"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:73",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:91",
+      "type": "CONNECT_TO",
+      "properties": {
+        "terminal_id": "E-709"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:74",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:90",
+      "type": "CONNECT_TO",
+      "properties": {
+        "terminal_id": "E-711"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:74",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:73",
+      "type": "LINE",
+      "properties": {
+        "length_km": 1.0,
+        "nominal_voltage_kv": 13.8,
+        "bch": 0.0,
+        "to_terminal_id": "E-456",
+        "x_ohm": 0.365778,
+        "r0_ohm": 0.0,
+        "short_circuit_end_temp_c": 80.0,
+        "r_ohm": 0.156256,
+        "name": "BRANCH-18",
+        "x0_ohm": 0.0,
+        "from_terminal_id": "E-455",
+        "b0ch": 0.0,
+        "rdf_id": "BRANCH-18"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:75",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:89",
+      "type": "CONNECT_TO",
+      "properties": {
+        "terminal_id": "E-713"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:75",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:74",
+      "type": "LINE",
+      "properties": {
+        "length_km": 1.0,
+        "nominal_voltage_kv": 13.8,
+        "bch": 0.0,
+        "to_terminal_id": "E-462",
+        "x_ohm": 0.160921,
+        "r0_ohm": 0.0,
+        "short_circuit_end_temp_c": 80.0,
+        "r_ohm": 0.060578,
+        "name": "BRANCH-16",
+        "x0_ohm": 0.0,
+        "from_terminal_id": "E-461",
+        "b0ch": 0.0,
+        "rdf_id": "BRANCH-16"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:75",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:76",
+      "type": "LINE",
+      "properties": {
+        "length_km": 1.0,
+        "nominal_voltage_kv": 13.8,
+        "bch": 0.0,
+        "to_terminal_id": "E-459",
+        "x_ohm": 0.514911,
+        "r0_ohm": 0.0,
+        "short_circuit_end_temp_c": 80.0,
+        "r_ohm": 0.242068,
+        "name": "BRANCH-17",
+        "x0_ohm": 0.0,
+        "from_terminal_id": "E-458",
+        "b0ch": 0.0,
+        "rdf_id": "BRANCH-17"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:76",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:87",
+      "type": "CONNECT_TO",
+      "properties": {
+        "terminal_id": "E-717"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:76",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:96",
+      "type": "CONNECT_TO",
+      "properties": {
+        "terminal_id": "E-901"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:77",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:82",
+      "type": "CONNECT_TO",
+      "properties": {
+        "side": "HV",
+        "terminal_id": "E-574"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:77",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:88",
+      "type": "CONNECT_TO",
+      "properties": {
+        "terminal_id": "E-715"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:77",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:75",
+      "type": "LINE",
+      "properties": {
+        "length_km": 1.0,
+        "nominal_voltage_kv": 13.8,
+        "bch": 0.0,
+        "to_terminal_id": "E-465",
+        "x_ohm": 0.209503,
+        "r0_ohm": 0.0,
+        "short_circuit_end_temp_c": 80.0,
+        "r_ohm": 0.0,
+        "name": "BRANCH-15",
+        "x0_ohm": 0.0,
+        "from_terminal_id": "E-464",
+        "b0ch": 0.0,
+        "rdf_id": "BRANCH-15"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:79",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:75",
+      "type": "CONNECT_TO",
+      "properties": {
+        "side": "LV",
+        "terminal_id": "E-572"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:80",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:70",
+      "type": "CONNECT_TO",
+      "properties": {
+        "side": "LV",
+        "terminal_id": "E-568"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:81",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:77",
+      "type": "CONNECT_TO",
+      "properties": {
+        "side": "LV",
+        "terminal_id": "E-564"
+      }
+    },
+    {
+      "from": "4:96a693de-39f5-4572-bfda-49cef4437a94:82",
+      "to": "4:96a693de-39f5-4572-bfda-49cef4437a94:78",
+      "type": "CONNECT_TO",
+      "properties": {
+        "side": "LV",
+        "terminal_id": "E-576"
+      }
+    }
+  ]
+}

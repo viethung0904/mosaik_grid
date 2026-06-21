@@ -39,7 +39,7 @@ class Line(mosaik_api.Simulator):
         self.start_time = 0                 # FMPy parameter
         self.stop_time = 0                  # FMPy parameter
         self.stop_time_defined = False      # FMPy parameter
-        self.sec_per_mt = 1                 # Number of seconds of internal time per mosaik time
+        self.sec_per_mt = 60                 # Number of seconds of internal time per mosaik time
         self.fmutimes = {}                  # Keeping track of each FMU's internal time
         self.eid = None
 

@@ -18,6 +18,7 @@ Network data sourced from Neo4j GraphDB.
 import os
 import sys
 import json
+import shutil
 import webbrowser
 
 from dotenv import load_dotenv
@@ -48,7 +49,7 @@ def fetch_all_network_params():
             sub_records = session.run(
                 'MATCH (s:Substation) '
                 'RETURN s.name AS name, s.nominal_voltage_kv AS v_nom, '
-                '       s.is_slack AS is_slack, s.is_pv AS is_pv, '
+                '       s.is_slack AS is_slack, s.is_sync_machine AS is_sync_machine, '
                 '       s.sv_voltage_kv AS sv_v, s.sv_angle_deg AS sv_ang, '
                 '       s.p_gen_mw AS p_gen_mw, s.q_gen_mvar AS q_gen_mvar '
                 'ORDER BY s.name'
@@ -57,7 +58,7 @@ def fetch_all_network_params():
                 r['name']: {
                     'v_nom_kv':      r['v_nom']  if r['v_nom']  is not None else 20.0,
                     'is_slack':      bool(r['is_slack']) if r['is_slack'] is not None else False,
-                    'is_pv':         bool(r['is_pv'])    if r['is_pv']    is not None else False,
+                    'is_sync_machine': bool(r['is_sync_machine']) if r['is_sync_machine'] is not None else False,
                     'sv_voltage_kv': r['sv_v']   if r['sv_v']   is not None else None,
                     'sv_angle_deg':  r['sv_ang'] if r['sv_ang'] is not None else 0.0,
                     'p_gen_mw':      r['p_gen_mw']   if r['p_gen_mw']   is not None else 0.0,
@@ -131,11 +132,11 @@ def _tr_x_hv(t):
 print('Fetching network parameters from GraphDB...')
 _sub_params, _transformers, _line_params, _load_params = fetch_all_network_params()
 
-_slack_subs = {name for name, sp in _sub_params.items() if sp['is_slack']}
-_pv_subs    = {name for name, sp in _sub_params.items() if sp['is_pv']}
+_slack_subs         = {name for name, sp in _sub_params.items() if sp['is_slack']}
+_sync_machine_subs  = {name for name, sp in _sub_params.items() if sp['is_sync_machine']}
 
 print(f'  True slack buses (is_slack=True): {sorted(_slack_subs)}')
-print(f'  PV generator buses (is_pv=True):  {sorted(_pv_subs)}')
+print(f'  SynchronousMachine buses (is_sync_machine=True): {sorted(_sync_machine_subs)}')
 
 print('Fetching topology edges from GraphDB...')
 _line_edges, _load_edges, _tr_edges = fetch_edges()
@@ -249,8 +250,8 @@ sim_config = {
     'ACLineSegment': {
         'python': 'line_simulator:Line',
     },
-    'Substation': {
-        'python': 'substation_simulator:Substation',
+    'SubstationNR': {
+        'python': 'substation_nr_simulator:SubstationNR',
     },
     'Load': {
         'python': 'load_simulator:Load',
@@ -284,43 +285,43 @@ for _t in _transformers:
           f"(R={_r_hv:.6f} Ω, X={_x_hv:.6f} Ω, U1={_u1} kV, U2={_u2} kV)")
 
 # ── Substation entities ───────────────────────────────────────────────────────
-bus_sim = world.start('Substation',
-    fmu_filename=os.path.join(FMU_DIR, 'Substation.fmu'),
+bus_sim = world.start('SubstationNR',
+    fmu_filename=os.path.join(FMU_DIR, 'SubstationNR.fmu'),
     instance_name='Substation_bus', step_size=1)
 
 for _sub_name in _all_subs:
     _sp      = _sub_params.get(_sub_name, {'v_nom_kv': 20.0, 'is_slack': False, 'sv_voltage_kv': None})
     _v_nom   = _sp['v_nom_kv']
     _v_slack = _sp.get('sv_voltage_kv') or _v_nom
-    _is_slack = _sub_name in _all_slack_subs
-    _is_pv    = _sub_name in _pv_subs
+    _is_slack        = _sub_name in _all_slack_subs
+    _is_sync_machine = _sub_name in _sync_machine_subs
 
     if _is_slack:
         _v_ang = _sp.get('sv_angle_deg', 0.0)
-        _e = bus_sim.Substation.create(1, is_slack=1.0, V_slack_kv=_v_slack,
-                                       V_slack_ang_deg=_v_ang)[0]
-    elif _is_pv:
+        _e = bus_sim.SubstationNR.create(1, is_slack=1.0, V_slack_kv=_v_slack,
+                                         V_slack_ang_deg=_v_ang)[0]
+    elif _is_sync_machine:
         _yre, _yim = _y_self.get(_sub_name, (0.0, 0.0))
         _v_pv      = _sp.get('sv_voltage_kv') or _v_nom
         _v_pv_ang  = _sp.get('sv_angle_deg', 0.0) or 0.0
         _v_init    = _sp.get('sv_voltage_kv') or (_v_nom / 5.0)
-        _e = bus_sim.Substation.create(
+        _e = bus_sim.SubstationNR.create(
             1, Y_self_re=_yre, Y_self_im=_yim,
             B_shunt=0.0, omega_relax=0.5, is_slack=0.0,
             V_slack_kv=_v_init, V_slack_ang_deg=_v_pv_ang,
-            is_pv=1.0, V_pv_kv=_v_pv)[0]
+            is_sync_machine=1.0, V_reg_kv=_v_pv)[0]
     else:
         _yre, _yim = _y_self.get(_sub_name, (0.0, 0.0))
         _v_init    = _sp.get('sv_voltage_kv') or (_v_nom / 5.0)
         _v_ang_init = _sp.get('sv_angle_deg', 0.0) or 0.0
-        _e = bus_sim.Substation.create(
+        _e = bus_sim.SubstationNR.create(
             1, Y_self_re=_yre, Y_self_im=_yim,
             B_shunt=0.0, omega_relax=0.5, is_slack=0.0,
             V_slack_kv=_v_init, V_slack_ang_deg=_v_ang_init)[0]
 
     _entity_map[_sub_var(_sub_name)] = _e
     print(f'  Instantiated Substation {_sub_name} '
-          f'(is_slack={_is_slack}, is_pv={_is_pv}, Y_self={_y_self.get(_sub_name, (0,0))})')
+          f'(is_slack={_is_slack}, is_sync_machine={_is_sync_machine}, Y_self={_y_self.get(_sub_name, (0,0))})')
 
 # ── Line entities ─────────────────────────────────────────────────────────────
 line_sim = world.start('ACLineSegment',
@@ -344,17 +345,17 @@ for _load_name, _lp in _load_params.items():
     _entity_map[_load_var(_load_name)] = _e
     print(f'  Instantiated Load {_load_name}')
 
-# ── PV bus generator injection loads ─────────────────────────────────────────
-_PV_GEN_LOAD_KEY = '__pv_gen__{}'
-for _pv_name in sorted(_pv_subs):
-    _sp    = _sub_params.get(_pv_name, {})
+# ── SynchronousMachine bus generator injection loads ─────────────────────────
+_SM_GEN_LOAD_KEY = '__sm_gen__{}'
+for _sm_name in sorted(_sync_machine_subs):
+    _sp    = _sub_params.get(_sm_name, {})
     _p_gen = _sp.get('p_gen_mw') or 0.0
     _q_gen = _sp.get('q_gen_mvar') or 0.0
     if abs(_p_gen) < 1e-9 and abs(_q_gen) < 1e-9:
         continue
     _e = load_sim.Load.create(1, p_mw=-_p_gen, q_mvar=-_q_gen)[0]
-    _entity_map[_PV_GEN_LOAD_KEY.format(_pv_name)] = _e
-    print(f'  Instantiated PV generator injection at {_pv_name}: '
+    _entity_map[_SM_GEN_LOAD_KEY.format(_sm_name)] = _e
+    print(f'  Instantiated SynchronousMachine generator injection at {_sm_name}: '
           f'P_gen={_p_gen:.4f} MW, Q_gen={_q_gen:.4f} MVAr')
 
 # ── Collector ─────────────────────────────────────────────────────────────────
@@ -433,12 +434,12 @@ for _edge in _load_edges:
     world.connect(_load_e, _sub_e, ('P_load_mw',   'P_load_mw'))
     world.connect(_load_e, _sub_e, ('Q_load_mvar', 'Q_load_mvar'))
 
-# PV generator injection loads
-for _pv_name in sorted(_pv_subs):
-    _key = _PV_GEN_LOAD_KEY.format(_pv_name)
+# SynchronousMachine generator injection loads
+for _sm_name in sorted(_sync_machine_subs):
+    _key = _SM_GEN_LOAD_KEY.format(_sm_name)
     if _key not in _entity_map:
         continue
-    world.connect(_entity_map[_key], _entity_map[_sub_var(_pv_name)],
+    world.connect(_entity_map[_key], _entity_map[_sub_var(_sm_name)],
                   ('P_load_mw', 'P_load_mw'), ('Q_load_mvar', 'Q_load_mvar'))
 
 # ── Collector connections ─────────────────────────────────────────────────────
@@ -481,6 +482,11 @@ else:
 
 # ── Run ───────────────────────────────────────────────────────────────────────
 world.run(until=STOP)
+
+# Save a named copy for cross-scenario comparison
+shutil.copy(os.path.join(PROJECT_DIR, 'output.json'),
+            os.path.join(PROJECT_DIR, 'output_tb.json'))
+print('Saved output_tb.json')
 
 # ── Visualization ─────────────────────────────────────────────────────────────
 print('\n=== Generating visualization ===')
@@ -537,4 +543,111 @@ except FileNotFoundError:
 except Exception as e:
     import traceback
     print(f'Visualization error: {e}')
+    traceback.print_exc()
+
+# ── Cross-scenario comparison ─────────────────────────────────────────────────
+# Requires output_tb.json (this scenario) + output_adaptive.json (scenario_adaptive.py).
+# Generates output_comparison.html with a grouped bar chart of final bus voltages,
+# voltage angles, and transformer losses side-by-side.
+print('\n=== Cross-scenario comparison ===')
+try:
+    _tb_path = os.path.join(PROJECT_DIR, 'output_tb.json')
+    _ad_path = os.path.join(PROJECT_DIR, 'output_adaptive.json')
+
+    if not os.path.exists(_ad_path):
+        print(f'Skipping comparison: {_ad_path} not found '
+              '(run scenario_adaptive.py first).')
+    else:
+        with open(_tb_path) as _f:
+            _tb_data = json.load(_f)
+        with open(_ad_path) as _f:
+            _ad_data = json.load(_f)
+
+        def _last_val(dataset, key):
+            """Last tick value for a key in a dataset dict."""
+            if key not in dataset:
+                return None
+            _d = dataset[key]
+            _last_t = str(max(int(t) for t in _d))
+            return _d[_last_t]
+
+        # ── Voltage magnitudes per bus ─────────────────────────────────────
+        _buses    = _all_subs
+        _v_tb_mag = [_last_val(_tb_data, f'V_{_sub_var(b)}_mag_kv') for b in _buses]
+        _v_ad_mag = [_last_val(_ad_data, f'V_{_sub_var(b)}_mag_kv') for b in _buses]
+        _v_ref    = [
+            _sub_params.get(b, {}).get('sv_voltage_kv')
+            or _sub_params.get(b, {}).get('v_nom_kv')
+            for b in _buses
+        ]
+
+        # ── Voltage angles per non-slack bus ──────────────────────────────
+        _ang_tb   = [_last_val(_tb_data, f'V_{_sub_var(b)}_ang_deg') for b in _nonslack_subs]
+        _ang_ad   = [_last_val(_ad_data, f'V_{_sub_var(b)}_ang_deg') for b in _nonslack_subs]
+
+        # ── Transformer losses ────────────────────────────────────────────
+        _tr_names  = [_t['name'] for _t in _transformers]
+        _ploss_tb  = [_last_val(_tb_data, f'P_loss_{_tr_var(n)}_mw') for n in _tr_names]
+        _ploss_ad  = [_last_val(_ad_data, f'P_loss_{_tr_var(n)}_mw') for n in _tr_names]
+
+        fig_cmp = make_subplots(
+            rows=3, cols=1,
+            subplot_titles=[
+                '|V| Bus Voltages — final converged value (kV)',
+                'Voltage Angle — non-slack buses (deg)',
+                'Transformer Active Losses (MW)',
+            ],
+        )
+
+        # Row 1: voltage magnitudes
+        fig_cmp.add_trace(go.Bar(
+            name='TransformerBranch π-model', x=_buses, y=_v_tb_mag,
+            marker_color='steelblue', legendgroup='tb'), row=1, col=1)
+        fig_cmp.add_trace(go.Bar(
+            name='Adaptive (TR1 forward)', x=_buses, y=_v_ad_mag,
+            marker_color='tomato', legendgroup='ad'), row=1, col=1)
+        fig_cmp.add_trace(go.Scatter(
+            name='CIM sv_voltage ref', x=_buses, y=_v_ref,
+            mode='markers', marker=dict(symbol='x', size=10, color='black'),
+            legendgroup='ref'), row=1, col=1)
+
+        # Row 2: voltage angles
+        if any(v is not None for v in _ang_tb + _ang_ad):
+            fig_cmp.add_trace(go.Bar(
+                name='TB angle', x=_nonslack_subs, y=_ang_tb,
+                marker_color='steelblue', showlegend=False, legendgroup='tb'),
+                row=2, col=1)
+            fig_cmp.add_trace(go.Bar(
+                name='Adaptive angle', x=_nonslack_subs, y=_ang_ad,
+                marker_color='tomato', showlegend=False, legendgroup='ad'),
+                row=2, col=1)
+
+        # Row 3: transformer losses
+        if _tr_names and any(v is not None for v in _ploss_tb + _ploss_ad):
+            fig_cmp.add_trace(go.Bar(
+                name='TB P_loss', x=_tr_names, y=_ploss_tb,
+                marker_color='steelblue', showlegend=False, legendgroup='tb'),
+                row=3, col=1)
+            fig_cmp.add_trace(go.Bar(
+                name='Adaptive P_loss', x=_tr_names, y=_ploss_ad,
+                marker_color='tomato', showlegend=False, legendgroup='ad'),
+                row=3, col=1)
+
+        fig_cmp.update_layout(
+            title_text='Scenario Comparison: TransformerBranch π-model vs Adaptive (TR1)',
+            barmode='group',
+            hovermode='x unified',
+            height=900,
+        )
+        fig_cmp.update_yaxes(title_text='|V| (kV)',   row=1, col=1)
+        fig_cmp.update_yaxes(title_text='angle (deg)', row=2, col=1)
+        fig_cmp.update_yaxes(title_text='P_loss (MW)', row=3, col=1)
+
+        _cmp_html = os.path.join(PROJECT_DIR, 'output_comparison.html')
+        fig_cmp.write_html(_cmp_html)
+        print(f'Comparison chart saved to {_cmp_html}')
+
+except Exception as _cmp_ex:
+    import traceback
+    print(f'Comparison error: {_cmp_ex}')
     traceback.print_exc()

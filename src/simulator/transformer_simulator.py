@@ -36,6 +36,7 @@ class Transformer(mosaik_api.Simulator):
         self.stop_time_defined = False      # FMPy parameter
         self.sec_per_mt = 60                 # Number of seconds of internal time per mosaik time
         self.fmutimes = {}                  # Keeping track of each FMU's internal time
+        self._phys_step = 0                 # Physical time step counter (incremented once per 60s step)
         self.eid = None
 
     def init(self, sid, time_resolution=1.0, fmu_filename=None, instance_name=None, step_size=None, 
@@ -124,80 +125,56 @@ class Transformer(mosaik_api.Simulator):
         return entities
 
     def step(self, time, inputs, max_advance):
-        target_time = (time + 1 + self.start_time) * self.sec_per_mt
+        target_time = (self._phys_step + 1) * 60.0   # 60 s per physical time step
+        self._phys_step += 1
         
         for eid in self._entities.keys():
-            for eid in self._entities.keys():
-            # Get input values for this entity
-                if eid in inputs:
-                    entity_inputs = inputs[eid]
-                    # Set V1_mag input 
-                    if self.model_description.fmiVersion == '2.0':
-                        if 'V1_mag' in entity_inputs:
-                            v1_mag_values = entity_inputs['V1_mag']
-                            if v1_mag_values:
-                                v1_mag = sum(v1_mag_values.values()) * 1000.0  # kV → V
-                                self._entities[eid].setReal([self.vrs['V1_mag']], [v1_mag])
-                        
-                        # Set V1_angle input
-                        if 'V1_angle' in entity_inputs:
-                            v1_angle_values = entity_inputs['V1_angle']
-                            if v1_angle_values:
-                                v1_angle = sum(v1_angle_values.values())  # Sum all charging sources
-                                self._entities[eid].setReal([self.vrs['V1_angle']], [v1_angle])
+            if eid in inputs:
+                entity_inputs = inputs[eid]
+                if self.model_description.fmiVersion == '2.0':
+                    if 'V1_mag' in entity_inputs:
+                        v1_mag_values = entity_inputs['V1_mag']
+                        if v1_mag_values:
+                            v1_mag = sum(v1_mag_values.values()) * 1000.0  # kV → V
+                            self._entities[eid].setReal([self.vrs['V1_mag']], [v1_mag])
+                    if 'V1_angle' in entity_inputs:
+                        v1_angle_values = entity_inputs['V1_angle']
+                        if v1_angle_values:
+                            self._entities[eid].setReal([self.vrs['V1_angle']], [sum(v1_angle_values.values())])
+                    if 'P2' in entity_inputs:
+                        p2_values = entity_inputs['P2']
+                        if p2_values:
+                            self._entities[eid].setReal([self.vrs['P2']], [sum(p2_values.values())])
+                    if 'Q2' in entity_inputs:
+                        q2_values = entity_inputs['Q2']
+                        if q2_values:
+                            self._entities[eid].setReal([self.vrs['Q2']], [sum(q2_values.values())])
+                elif self.model_description.fmiVersion == '3.0':
+                    if 'V1_mag' in entity_inputs:
+                        v1_mag_values = entity_inputs['V1_mag']
+                        if v1_mag_values:
+                            v1_mag = sum(v1_mag_values.values()) * 1000.0  # kV → V
+                            self._entities[eid].setFloat64([self.vrs['V1_mag']], [v1_mag])
+                    if 'V1_angle' in entity_inputs:
+                        v1_angle_values = entity_inputs['V1_angle']
+                        if v1_angle_values:
+                            self._entities[eid].setFloat64([self.vrs['V1_angle']], [sum(v1_angle_values.values())])
+                    if 'P2' in entity_inputs:
+                        p2_values = entity_inputs['P2']
+                        if p2_values:
+                            self._entities[eid].setFloat64([self.vrs['P2']], [sum(p2_values.values())])
+                    if 'Q2' in entity_inputs:
+                        q2_values = entity_inputs['Q2']
+                        if q2_values:
+                            self._entities[eid].setFloat64([self.vrs['Q2']], [sum(q2_values.values())])
 
-                        # Set P2 input 
-                        if 'P2' in entity_inputs:
-                            p2_values = entity_inputs['P2']
-                            if p2_values:
-                                p2 = sum(p2_values.values())  # Sum all load sources
-                                self._entities[eid].setReal([self.vrs['P2']], [p2])
-                        # Set Q2 input
-                        if 'Q2' in entity_inputs:
-                            q2_values = entity_inputs['Q2']
-                            if q2_values:
-                                q2 = sum(q2_values.values())  # Sum all load sources
-                                self._entities[eid].setReal([self.vrs['Q2']], [q2])
-
-                    elif self.model_description.fmiVersion == '3.0':
-                    
-                    # Set V_send_real input (from PV)
-                        if 'V1_mag' in entity_inputs:
-                            v1_mag_values = entity_inputs['V1_mag']
-                            if v1_mag_values:
-                                v1_mag = sum(v1_mag_values.values()) * 1000.0  # kV → V
-                                self._entities[eid].setFloat64([self.vrs['V1_mag']], [v1_mag])
-                        
-                        # Set V1_angle input
-                        if 'V1_angle' in entity_inputs:
-                            v1_angle_values = entity_inputs['V1_angle']
-                            if v1_angle_values:
-                                v1_angle = sum(v1_angle_values.values())  # Sum all charging sources
-                                self._entities[eid].setFloat64([self.vrs['V1_angle']], [v1_angle])
-
-                        # Set R_load input (from Load)
-                        if 'P2' in entity_inputs:
-                            p2_values = entity_inputs['P2']
-                            if p2_values:
-                                p2 = sum(p2_values.values())  # Sum all load sources
-                                self._entities[eid].setFloat64([self.vrs['P2']], [p2])
-
-                        # Set Q2 input (from Load)
-                        if 'Q2' in entity_inputs:
-                            q2_values = entity_inputs['Q2']
-                            if q2_values:
-                                q2 = sum(q2_values.values())  # Sum all load sources
-                                self._entities[eid].setFloat64([self.vrs['Q2']], [q2])
-            
-            communication_point = self.fmutimes[eid] 
+            communication_point = self.fmutimes[eid]
             communication_step_size = target_time - communication_point
-
-            status = self._entities[eid].doStep(currentCommunicationPoint = communication_point,
-                    communicationStepSize = communication_step_size)
-            
+            self._entities[eid].doStep(currentCommunicationPoint=communication_point,
+                                       communicationStepSize=communication_step_size)
             self.fmutimes[eid] += communication_step_size
 
-        return time + 1  # Return next Mosaik time step
+        return time + self.step_size  # Return next Mosaik time step
     
     def get_data(self, outputs):
         data = {}

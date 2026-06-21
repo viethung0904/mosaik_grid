@@ -48,10 +48,13 @@ LOAD_A2 = (0.300, 0.150)
 LOAD_B1 = (0.432, 0.108)
 LOAD_B2 = (0.275, 0.100)
 
-OMEGA     = 0.5   # LIM under-relaxation factor (0.5 required for radial/tree networks)
-MAX_LIM   = 5000  # max LIM Jacobi iterations
-MAX_OUTER = 20    # max outer (transformer ↔ network) iterations
-TOL       = 1e-6  # convergence threshold [kV]
+OMEGA         = 0.5    # LIM under-relaxation factor
+MAX_LIM_OUTER = 5000   # max iterations for LIM bus update (Gauss-Jacobi)
+MAX_NR_OUTER  = 200    # max outer branch-current iterations for NR (typically < 10)
+MAX_OUTER     = 20     # max outer (transformer ↔ network) iterations
+TOL           = 1e-6   # outer convergence threshold [kV]
+NR_TOL        = 1e-10  # inner NR convergence threshold [kA]
+NR_MAX        = 50     # inner NR iteration cap per bus per outer step
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -92,68 +95,42 @@ def transformer_v2(V1_kv, V1_deg, P2_mw, Q2_mvar):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 4.  MV network — LIM (Latency Insertion Method) Jacobi iteration
+# 4.  MV network — LIM (Gauss-Jacobi) solver
 #
-#  The LIM decomposes the network into branch and bus updates that use only
-#  values from the PREVIOUS iteration — mirroring the one-step FMI coupling
-#  delay that a real co-simulation master would impose.
+#  Classic Gauss-Jacobi iteration with under-relaxation (ω = OMEGA):
+#    I_in^(k)   = (V_slack − V_bus^(k)) / Z_branch
+#    I_load^(k) = conj(S / V_bus^(k))
+#    V_bus^(k+1) = V_bus^(k) + ω · (I_in^(k) − I_load^(k)) / Y_self
 #
-#  Branch update (explicit Ohm's law, zero-inductance limit):
-#    I_A^(k+1) = (V_slack^(k) − V_A^(k)) / Z_A
-#    I_B^(k+1) = (V_slack^(k) − V_B^(k)) / Z_B
-#
-#  Bus update (under-relaxed Jacobi KCL):
-#    I_load    = conj(S_load / V^(k))           constant-power load current
-#    residual  = I_in^(k+1) − I_load            KCL error at this bus
-#    V^(k+1)   = V^(k) + ω · residual / Y_self
-#
-#  Why ω < 1: for a radial/tree network Y_off ≈ Y_self at every bus,
-#  so pure Jacobi (ω=1) has spectral radius ρ ≥ 1 and diverges.
-#  ω = 0.5 gives ρ_eff ≈ 0.5, converging in ~3500 iterations.
+#  Y_self = 1/Z_branch for a single-branch (radial) bus.
+#  Converges linearly; mirrors one FMI co-simulation tick per mosaik step.
 # ─────────────────────────────────────────────────────────────────────────────
 
-def solve_mv_network(V_slack_kv, record_history=False):
+def solve_mv_network_lim(V_slack_kv, record_history=False):
     """
-    LIM Jacobi iteration for the 2-branch MV network.
-
-    Returns
-    -------
-    V_A, V_B           : complex bus voltages [kV]
-    S_from_A, S_from_B : complex sending-end apparent power [MVA]
-    iters              : LIM iterations taken
-    history            : dict of lists {bus: [|V| per iteration]} if record_history
+    LIM (Gauss-Jacobi) solver for the 2-branch MV network.
+    Each outer iteration = one FMI co-simulation tick in the mosaik scenario.
     """
-    V_slack = complex(V_slack_kv, 0.0)
-    Z_A = complex(LINE_A["r"], LINE_A["x"])   # Ω  (Ω·kA = kV — no unit scaling)
-    Z_B = complex(LINE_B["r"], LINE_B["x"])
+    V_slack  = complex(V_slack_kv, 0.0)
+    Z_A      = complex(LINE_A["r"], LINE_A["x"])
+    Z_B      = complex(LINE_B["r"], LINE_B["x"])
+    Y_self_A = 1.0 / Z_A
+    Y_self_B = 1.0 / Z_B
 
-    # Bus self-admittances: Y_self = Σ y_ij of all adjacent branches
-    Y_self_A = 1.0 / Z_A   # only Line_A connects to Sub_A
-    Y_self_B = 1.0 / Z_B   # only Line_B connects to Sub_B
-
-    # Flat start at slack voltage
     V_A = V_slack
     V_B = V_slack
 
     history = {"MV_Slack": [], "Sub_A": [], "Sub_B": []} if record_history else None
 
-    for iters in range(1, MAX_LIM + 1):
-        # ── Step 1: branch currents from PREVIOUS voltages (explicit Ohm's law) ──
-        I_A = (V_slack - V_A) / Z_A   # kA, from slack toward Sub_A
-        I_B = (V_slack - V_B) / Z_B   # kA, from slack toward Sub_B
+    for iters in range(1, MAX_LIM_OUTER + 1):
+        I_A = (V_slack - V_A) / Z_A
+        I_B = (V_slack - V_B) / Z_B
 
-        # ── Step 2: constant-power load currents at each bus ──────────────────
-        I_load_A = (S_A / V_A).conjugate() if abs(V_A) > 1e-9 else 0+0j
-        I_load_B = (S_B / V_B).conjugate() if abs(V_B) > 1e-9 else 0+0j
+        I_load_A = (S_A / V_A).conjugate() if abs(V_A) > 1e-9 else complex(0.0)
+        I_load_B = (S_B / V_B).conjugate() if abs(V_B) > 1e-9 else complex(0.0)
 
-        # ── Step 3: KCL residual and under-relaxed Jacobi bus update ──────────
-        #  residual = net injected current − load current
-        #  (no shunt term: bch = 0 for both lines)
-        res_A = I_A - I_load_A
-        res_B = I_B - I_load_B
-
-        V_A_new = V_A + OMEGA * res_A / Y_self_A
-        V_B_new = V_B + OMEGA * res_B / Y_self_B
+        V_A_new = V_A + OMEGA * (I_A - I_load_A) / Y_self_A
+        V_B_new = V_B + OMEGA * (I_B - I_load_B) / Y_self_B
 
         if record_history:
             history["MV_Slack"].append(V_slack_kv)
@@ -165,9 +142,8 @@ def solve_mv_network(V_slack_kv, record_history=False):
             break
         V_A, V_B = V_A_new, V_B_new
 
-    # Sending-end apparent power [MVA] = V_slack · conj(I)
-    I_A = (V_slack - V_A) / Z_A
-    I_B = (V_slack - V_B) / Z_B
+    I_A      = (V_slack - V_A) / Z_A
+    I_B      = (V_slack - V_B) / Z_B
     S_from_A = V_slack * I_A.conjugate()
     S_from_B = V_slack * I_B.conjugate()
 
@@ -175,100 +151,283 @@ def solve_mv_network(V_slack_kv, record_history=False):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5.  Outer loop: converge transformer ↔ MV network
+# 5.  MV network — Newton-Raphson bus solve inside an outer branch-current loop
 #
-#  The transformer output voltage V2 depends on total MV apparent power (P2, Q2).
-#  Total MV power (load + line losses) = sum of sending-end powers.
-#  These depend on bus voltages, which depend on V2 (= V_mv_slack).
-#  → iterate until V_mv_slack stops changing.
+#  The outer loop updates branch currents using previous-step voltages
+#  (mirroring the one-step FMI coupling delay in co-simulation):
+#    I_A^(k+1) = (V_slack^(k) − V_A^(k)) / Z_A
+#    I_B^(k+1) = (V_slack^(k) − V_B^(k)) / Z_B
+#
+#  The inner NR solve finds the exact bus voltage for the given I_in:
+#    f(V) = I_in − conj(S/V) − jB·V = 0
+#
+#  In rectangular form (V = x+jy, D = x²+y², A = Px+Qy, C = Py−Qx):
+#    f_re = I_in_re − A/D + B·y = 0
+#    f_im = I_in_im − C/D − B·x = 0
+#
+#  Jacobian:
+#    J11 = (2x·A − P·D) / D²
+#    J12 = (2y·A − Q·D) / D² + B
+#    J21 = (Q·D + 2x·C) / D² − B
+#    J22 = (2y·C − P·D) / D²
+#
+#  Update: Δx = −(J22·f_re − J12·f_im)/det,  Δy = (J21·f_re − J11·f_im)/det
+#
+#  Converges quadratically; the outer loop typically takes < 10 iterations.
 # ─────────────────────────────────────────────────────────────────────────────
 
-V_mv_slack_kv = TR["ratedU2"] / 1e3   # initial guess: 20.0 kV (nominal)
+def _nr_bus_solve(I_in, S_load, V_init, B_shunt=0.0):
+    """
+    Newton-Raphson solve for one bus: find V such that
+        I_in = conj(S_load / V) + jB·V
 
-print(f"{'Outer':>6}  {'V_mv kV':>10}  {'P2 MW':>8}  {'Q2 MVAr':>9}  {'LIM iters':>10}")
+    Parameters
+    ----------
+    I_in   : complex injected current from adjacent branches [kA]
+    S_load : complex load apparent power [MVA]  (P + jQ, positive = consumption)
+    V_init : complex initial voltage estimate [kV]  (warm start)
+    B_shunt: shunt susceptance [S]  (0 for these lines)
 
-lim_history = None   # will hold voltage history from the final outer iteration
+    Returns
+    -------
+    V : complex converged bus voltage [kV]
+    """
+    P, Q = S_load.real, S_load.imag
+    B    = B_shunt
+    x, y = V_init.real, V_init.imag
 
-for outer in range(1, MAX_OUTER + 1):
-    is_last = False   # re-evaluated after convergence check below
-    V_A, V_B, S_from_A, S_from_B, bfs_iters, _ = solve_mv_network(V_mv_slack_kv)
+    for _ in range(NR_MAX):
+        D = x * x + y * y
+        if D < 1e-18:
+            break  # voltage collapsed
 
-    # Total apparent power drawn from transformer LV terminal [MVA]
-    S_total = S_from_A + S_from_B
-    P2_mw   = S_total.real
-    Q2_mvar = S_total.imag
+        A = P * x + Q * y
+        C = P * y - Q * x
 
-    V_mv_new_kv = transformer_v2(HV_SLACK_KV, HV_SLACK_DEG, P2_mw, Q2_mvar)
+        f_re = I_in.real - A / D + B * y
+        f_im = I_in.imag - C / D - B * x
 
-    print(f"{outer:>6}  {V_mv_new_kv:>10.6f}  {P2_mw:>8.4f}  {Q2_mvar:>9.4f}  {bfs_iters:>10}")
+        if math.hypot(f_re, f_im) < NR_TOL:
+            break  # converged
 
-    if abs(V_mv_new_kv - V_mv_slack_kv) < TOL:
-        V_mv_slack_kv = V_mv_new_kv
-        # Re-run final iteration with history recording for the plot
-        V_A, V_B, S_from_A, S_from_B, bfs_iters, lim_history = solve_mv_network(
-            V_mv_slack_kv, record_history=True
-        )
-        break
-    V_mv_slack_kv = V_mv_new_kv
+        D2  = D * D
+        J11 = (2.0 * x * A - P * D) / D2
+        J12 = (2.0 * y * A - Q * D) / D2 + B
+        J21 = (Q * D + 2.0 * x * C) / D2 - B
+        J22 = (2.0 * y * C - P * D) / D2
+
+        det = J11 * J22 - J12 * J21
+        if abs(det) < 1e-30:
+            break  # singular Jacobian
+
+        dx = -(J22 * f_re - J12 * f_im) / det
+        dy =  (J21 * f_re - J11 * f_im) / det
+        x += dx
+        y += dy
+
+    return complex(x, y)
+
+
+def solve_mv_network_nr(V_slack_kv, record_history=False):
+    """
+    Newton-Raphson power flow for the 2-branch MV network.
+
+    Solves the full per-bus power flow equation including branch admittance:
+        f(V) = (V_slack − V) / Z_branch − conj(S / V) = 0
+
+    Since buses A and B are only connected to the slack (radial topology),
+    they are decoupled and solved independently in one NR loop — no outer
+    branch-current coupling iteration is needed.
+
+    Full Jacobian (V = x+jy, D=x²+y², A=Px+Qy, C=Py−Qx, r=Z.real, z=Z.imag):
+        J11 = −r/|Z|² + (2xA − PD)/D²
+        J12 =  z/|Z|² + (2yA − QD)/D²
+        J21 =  z/|Z|² + (QD + 2xC)/D²
+        J22 = −r/|Z|² + (2yC − PD)/D²
+
+    Returns
+    -------
+    V_A, V_B           : complex bus voltages [kV]
+    S_from_A, S_from_B : complex sending-end apparent power [MVA]
+    iters              : NR iterations taken
+    history            : dict of lists {bus: [|V| per NR iter]} if record_history
+    """
+    vs    = V_slack_kv
+    Z_A   = complex(LINE_A["r"], LINE_A["x"])
+    Z_B   = complex(LINE_B["r"], LINE_B["x"])
+    Zsq_A = Z_A.real**2 + Z_A.imag**2
+    Zsq_B = Z_B.real**2 + Z_B.imag**2
+    P_A, Q_A = S_A.real, S_A.imag
+    P_B, Q_B = S_B.real, S_B.imag
+
+    # Flat start at slack voltage (fine for NR with full Jacobian)
+    x_A, y_A = vs, 0.0
+    x_B, y_B = vs, 0.0
+
+    history = {"MV_Slack": [], "Sub_A": [], "Sub_B": []} if record_history else None
+
+    for iters in range(1, MAX_NR_OUTER + 1):
+        # ── Bus A ────────────────────────────────────────────────────────────
+        D_A    = x_A*x_A + y_A*y_A
+        A_A    = P_A*x_A + Q_A*y_A
+        C_A    = P_A*y_A - Q_A*x_A
+        f_re_A = ((vs - x_A)*Z_A.real - y_A*Z_A.imag) / Zsq_A - A_A / D_A
+        f_im_A = (-(vs - x_A)*Z_A.imag - y_A*Z_A.real) / Zsq_A - C_A / D_A
+        D2_A   = D_A * D_A
+        J11 = -Z_A.real/Zsq_A + (2*x_A*A_A - P_A*D_A) / D2_A
+        J12 = -Z_A.imag/Zsq_A + (2*y_A*A_A - Q_A*D_A) / D2_A
+        J21 =  Z_A.imag/Zsq_A + (Q_A*D_A + 2*x_A*C_A) / D2_A
+        J22 = -Z_A.real/Zsq_A + (2*y_A*C_A - P_A*D_A) / D2_A
+        det_A  = J11*J22 - J12*J21
+        if abs(det_A) > 1e-30:
+            x_A -= (J22*f_re_A - J12*f_im_A) / det_A
+            y_A += (J21*f_re_A - J11*f_im_A) / det_A
+
+        # ── Bus B ────────────────────────────────────────────────────────────
+        D_B    = x_B*x_B + y_B*y_B
+        A_B    = P_B*x_B + Q_B*y_B
+        C_B    = P_B*y_B - Q_B*x_B
+        f_re_B = ((vs - x_B)*Z_B.real - y_B*Z_B.imag) / Zsq_B - A_B / D_B
+        f_im_B = (-(vs - x_B)*Z_B.imag - y_B*Z_B.real) / Zsq_B - C_B / D_B
+        D2_B   = D_B * D_B
+        J11b = -Z_B.real/Zsq_B + (2*x_B*A_B - P_B*D_B) / D2_B
+        J12b = -Z_B.imag/Zsq_B + (2*y_B*A_B - Q_B*D_B) / D2_B
+        J21b =  Z_B.imag/Zsq_B + (Q_B*D_B + 2*x_B*C_B) / D2_B
+        J22b = -Z_B.real/Zsq_B + (2*y_B*C_B - P_B*D_B) / D2_B
+        det_B  = J11b*J22b - J12b*J21b
+        if abs(det_B) > 1e-30:
+            x_B -= (J22b*f_re_B - J12b*f_im_B) / det_B
+            y_B += (J21b*f_re_B - J11b*f_im_B) / det_B
+
+        if record_history:
+            history["MV_Slack"].append(vs)
+            history["Sub_A"].append(math.hypot(x_A, y_A))
+            history["Sub_B"].append(math.hypot(x_B, y_B))
+
+        if math.hypot(f_re_A, f_im_A) < NR_TOL and math.hypot(f_re_B, f_im_B) < NR_TOL:
+            break
+
+    V_A      = complex(x_A, y_A)
+    V_B      = complex(x_B, y_B)
+    V_slack  = complex(vs, 0.0)
+    I_A      = (V_slack - V_A) / Z_A
+    I_B      = (V_slack - V_B) / Z_B
+    S_from_A = V_slack * I_A.conjugate()
+    S_from_B = V_slack * I_B.conjugate()
+
+    return V_A, V_B, S_from_A, S_from_B, iters, history
+
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 6.  Results
+# 6.  Run both methods: transformer outer loop drives each network solver
+# ─────────────────────────────────────────────────────────────────────────────
+
+def run_outer_loop(solver_fn, label):
+    """Converge transformer ↔ MV network using the given network solver."""
+    V_mv_kv = TR["ratedU2"] / 1e3   # flat start: 20.0 kV nominal
+    V_A = V_B = complex(V_mv_kv, 0.0)
+    S_from_A = S_from_B = complex(0.0)
+    P2_mw = Q2_mvar = 0.0
+    inner_iters = outer_iters = 0
+    history = None
+
+    print(f"\n{'─'*68}")
+    print(f"  {label}")
+    print(f"  {'Outer':>5}  {'V_mv kV':>11}  {'P2 MW':>8}  {'Q2 MVAr':>9}  {'inner':>7}")
+
+    for outer in range(1, MAX_OUTER + 1):
+        V_A, V_B, S_from_A, S_from_B, inner_iters, _ = solver_fn(V_mv_kv)
+        S_total  = S_from_A + S_from_B
+        P2_mw    = S_total.real
+        Q2_mvar  = S_total.imag
+        V_mv_new = transformer_v2(HV_SLACK_KV, HV_SLACK_DEG, P2_mw, Q2_mvar)
+        outer_iters = outer
+        print(f"  {outer:>5}  {V_mv_new:>11.6f}  {P2_mw:>8.4f}  {Q2_mvar:>9.4f}  {inner_iters:>7}")
+        if abs(V_mv_new - V_mv_kv) < TOL:
+            V_mv_kv = V_mv_new
+            V_mv_kv = V_mv_new
+            break
+        V_mv_kv = V_mv_new
+
+    # Always capture history for plotting (converged or not)
+    V_A, V_B, S_from_A, S_from_B, inner_iters, history = solver_fn(
+        V_mv_kv, record_history=True
+    )
+
+    return dict(
+        V_mv=V_mv_kv, V_A=V_A, V_B=V_B,
+        P2=P2_mw, Q2=Q2_mvar,
+        outer=outer_iters, inner=inner_iters,
+        history=history,
+    )
+
+
+res_lim = run_outer_loop(solve_mv_network_lim, "LIM — Gauss-Jacobi  (ω = 0.5)")
+res_nr  = run_outer_loop(solve_mv_network_nr,  "NR  — Newton-Raphson inner solve")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 7.  Comparison table
 # ─────────────────────────────────────────────────────────────────────────────
 
 print()
-print("─" * 55)
-print(f"  HV slack       : {HV_SLACK_KV:.3f} kV  ∠ {HV_SLACK_DEG:.2f}°")
-print(f"  Transformer V2 : {V_mv_slack_kv:.4f} kV")
-print(f"  Total P2       : {P2_mw:.4f} MW  (load + line losses)")
-print(f"  Total Q2       : {Q2_mvar:.4f} MVAr")
-print()
-print(f"  {'Bus':<12}  {'|V| kV':>10}  {'angle °':>10}")
-print(f"  {'-'*12}  {'-'*10}  {'-'*10}")
-print(f"  {'MV_Slack':<12}  {V_mv_slack_kv:>10.4f}  {'0.0000':>10}")
-print(f"  {'Sub_A':<12}  {abs(V_A):>10.4f}  {math.degrees(cmath.phase(V_A)):>10.4f}")
-print(f"  {'Sub_B':<12}  {abs(V_B):>10.4f}  {math.degrees(cmath.phase(V_B)):>10.4f}")
-print()
-print("  Load breakdown:")
-print(f"    Sub_A : Load_A1 = {LOAD_A1[0]} MW + {LOAD_A1[1]} MVAr")
-print(f"            Load_A2 = {LOAD_A2[0]} MW + {LOAD_A2[1]} MVAr")
-print(f"    Sub_B : Load_B1 = {LOAD_B1[0]} MW + {LOAD_B1[1]} MVAr")
-print(f"            Load_B2 = {LOAD_B2[0]} MW + {LOAD_B2[1]} MVAr")
+print("═" * 68)
+print(f"  {'Quantity':<26}  {'LIM':>16}  {'NR':>16}")
+print(f"  {'─'*26}  {'─'*16}  {'─'*16}")
+print(f"  {'Transformer V2 [kV]':<26}  {res_lim['V_mv']:>16.6f}  {res_nr['V_mv']:>16.6f}")
+print(f"  {'Sub_A |V| [kV]':<26}  {abs(res_lim['V_A']):>16.6f}  {abs(res_nr['V_A']):>16.6f}")
+print(f"  {'Sub_A angle [°]':<26}  {math.degrees(cmath.phase(res_lim['V_A'])):>16.6f}  {math.degrees(cmath.phase(res_nr['V_A'])):>16.6f}")
+print(f"  {'Sub_B |V| [kV]':<26}  {abs(res_lim['V_B']):>16.6f}  {abs(res_nr['V_B']):>16.6f}")
+print(f"  {'Sub_B angle [°]':<26}  {math.degrees(cmath.phase(res_lim['V_B'])):>16.6f}  {math.degrees(cmath.phase(res_nr['V_B'])):>16.6f}")
+print(f"  {'Total P2 [MW]':<26}  {res_lim['P2']:>16.6f}  {res_nr['P2']:>16.6f}")
+print(f"  {'Total Q2 [MVAr]':<26}  {res_lim['Q2']:>16.6f}  {res_nr['Q2']:>16.6f}")
+print(f"  {'Outer iters (transformer)':<26}  {res_lim['outer']:>16}  {res_nr['outer']:>16}")
+print(f"  {'GJ/NR iters (final call)':<26}  {res_lim['inner']:>16}  {res_nr['inner']:>16}")
+print(f"  {'|V_A| difference [kV]':<26}  {abs(abs(res_lim['V_A']) - abs(res_nr['V_A'])):>34.2e}")
+print(f"  {'|V_B| difference [kV]':<26}  {abs(abs(res_lim['V_B']) - abs(res_nr['V_B'])):>34.2e}")
+print("═" * 68)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 7.  Voltage convergence plot
+# 8.  Convergence comparison plot  (2 × 2 grid)
 # ─────────────────────────────────────────────────────────────────────────────
 
-if lim_history:
-    iters_axis = range(1, len(lim_history["Sub_A"]) + 1)
+fig, axes = plt.subplots(2, 2, figsize=(14, 8))
+fig.suptitle(
+    "LIM (Gauss-Jacobi) vs Newton-Raphson — Outer Iteration Convergence",
+    fontsize=13,
+)
 
-    fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
+methods = [
+    ("LIM  (Gauss-Jacobi, ω=0.5)",      res_lim["history"], res_lim["inner"], "GJ iteration"),
+    ("NR   (Newton-Raphson power flow)",  res_nr["history"],  res_nr["inner"],  "NR iteration"),
+]
 
-    # ── Top: absolute voltage magnitude ──────────────────────────────────────
-    ax1 = axes[0]
-    ax1.plot(iters_axis, lim_history["MV_Slack"], color="tab:green",
-             linewidth=1.5, label="MV_Slack (fixed)")
-    ax1.plot(iters_axis, lim_history["Sub_A"],    color="tab:blue",
-             linewidth=1.2, label="Sub_A")
-    ax1.plot(iters_axis, lim_history["Sub_B"],    color="tab:orange",
-             linewidth=1.2, label="Sub_B")
-    ax1.set_ylabel("|V| [kV]")
-    ax1.set_title(f"LIM voltage convergence  (ω = {OMEGA}, converged at iter {bfs_iters})")
-    ax1.legend(loc="right")
-    ax1.grid(True, linestyle=":")
+for col, (title, hist, n_iters, xlabel) in enumerate(methods):
+    ax_top = axes[0][col]
+    ax_bot = axes[1][col]
+    n = len(hist["Sub_A"])
+    iters_axis = list(range(1, n + 1))
 
-    # ── Bottom: deviation from converged value ────────────────────────────────
-    ax2 = axes[1]
-    V_A_conv = lim_history["Sub_A"][-1]
-    V_B_conv = lim_history["Sub_B"][-1]
-    dV_A = [abs(v - V_A_conv) for v in lim_history["Sub_A"]]
-    dV_B = [abs(v - V_B_conv) for v in lim_history["Sub_B"]]
-    ax2.semilogy(iters_axis, dV_A, color="tab:blue",   linewidth=1.2, label="Sub_A error")
-    ax2.semilogy(iters_axis, dV_B, color="tab:orange", linewidth=1.2, label="Sub_B error")
-    ax2.axhline(TOL, color="red", linestyle="--", linewidth=1, label=f"TOL = {TOL}")
-    ax2.set_xlabel("LIM iteration")
-    ax2.set_ylabel("|ΔV| [kV]  (log scale)")
-    ax2.legend(loc="upper right")
-    ax2.grid(True, linestyle=":")
+    # ── Top: absolute voltage magnitude ──────────────────────────────────
+    ax_top.plot(iters_axis, hist["MV_Slack"], color="tab:green",  lw=1.5, label="MV_Slack")
+    ax_top.plot(iters_axis, hist["Sub_A"],    color="tab:blue",   lw=1.2, label="Sub_A")
+    ax_top.plot(iters_axis, hist["Sub_B"],    color="tab:orange", lw=1.2, label="Sub_B")
+    ax_top.set_title(f"{title}\n(converged at iter {n_iters})")
+    ax_top.set_ylabel("|V| [kV]")
+    ax_top.legend(loc="right")
+    ax_top.grid(True, linestyle=":")
 
-    plt.tight_layout()
-    plt.show()
+    # ── Bottom: deviation from converged value (log scale) ───────────────
+    V_A_conv = hist["Sub_A"][-1]
+    V_B_conv = hist["Sub_B"][-1]
+    dV_A = [max(abs(v - V_A_conv), 1e-16) for v in hist["Sub_A"]]
+    dV_B = [max(abs(v - V_B_conv), 1e-16) for v in hist["Sub_B"]]
+    ax_bot.semilogy(iters_axis, dV_A, color="tab:blue",   lw=1.2, label="Sub_A error")
+    ax_bot.semilogy(iters_axis, dV_B, color="tab:orange", lw=1.2, label="Sub_B error")
+    ax_bot.axhline(TOL, color="red", linestyle="--", lw=1, label=f"TOL={TOL}")
+    ax_bot.set_xlabel(xlabel)
+    ax_bot.set_ylabel("|ΔV| [kV]  (log scale)")
+    ax_bot.legend(loc="upper right")
+    ax_bot.grid(True, linestyle=":")
+
+plt.tight_layout()
+plt.show()

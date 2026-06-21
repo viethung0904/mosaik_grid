@@ -36,6 +36,7 @@ class Load(mosaik_api.Simulator):
         self.stop_time_defined = False      # FMPy parameter
         self.sec_per_mt = 60                 # Number of seconds of internal time per mosaik time
         self.fmutimes = {}                  # Keeping track of each FMU's internal time
+        self._phys_step = 0                 # Physical time step counter (incremented once per 60s step)
         self.eid = None
 
     def init(self, sid, time_resolution=1.0, fmu_filename=None, instance_name=None, step_size=None, 
@@ -114,7 +115,8 @@ class Load(mosaik_api.Simulator):
         return entities
 
     def step(self, time, inputs, max_advance):
-        target_time = (time + 1 + self.start_time) * self.sec_per_mt
+        target_time = (self._phys_step + 1) * 60.0   # 60 s per physical time step
+        self._phys_step += 1
         
         for eid in self._entities.keys():
             # Load has no inputs to set (it generates its own profile)
@@ -127,7 +129,7 @@ class Load(mosaik_api.Simulator):
             
             self.fmutimes[eid] += communication_step_size
 
-        return time + 1  # Return next Mosaik time step
+        return time + self.step_size  # Return next Mosaik time step
     
     def get_data(self, outputs):
         data = {}

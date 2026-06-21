@@ -11,29 +11,29 @@ class TransformerBranch(Model):
     Models a two-winding transformer as a current-injection branch suitable
     for use in the LIM (Linear Iteration Method) co-simulation master.
 
-    Mathematical model (off-nominal tap, series impedance referred to HV):
+    Mathematical model (standard physical transformer, series impedance referred to HV):
         Turns ratio (real, phaseAngleClock = 0 for IEEE 14-bus):
             t = rated_u1_kv / rated_u2_kv
 
         Series admittance referred to HV side:
-            y_s = 1 / (r_hv_ohm + j·x_hv_ohm)
+            y_s = 1 / (r_hv_ohm + j·x_hv_ohm)   [= y_HV]
 
-        Nodal admittance matrix:
-            [ I_HV ]   [ y_s / t²    -y_s / t ] [ V_HV ]
-            [ I_LV ] = [ -y_s / t      y_s    ] [ V_LV ]
+        Physical nodal admittance matrix in kV/kA units:
+            [ I_HV ]   [ -y_s      t·y_s  ] [ V_HV ]
+            [ I_LV ] = [  t·y_s  -t²·y_s  ] [ V_LV ]
 
-        Current injected INTO each bus (LIM KCL sign convention, matching
-        ACLineSegment: outgoing current → negative injection):
+        Note: this is the STANDARD physical transformer model (not per-unit).
+        Current injected INTO each bus (LIM KCL sign convention):
 
-            I_in_HV = -(y_s/t²)·V_HV + (y_s/t)·V_LV
-            I_in_LV = +(y_s/t)·V_HV  -  y_s·V_LV
+            I_in_HV = -y_s·V_HV + t·y_s·V_LV
+            I_in_LV = +t·y_s·V_HV - t²·y_s·V_LV
 
         Both voltages are taken from the previous LIM iteration (time_shifted=True
         in the mosaik connection), providing the required one-step Jacobi delay.
 
     Y_self contributions (added in scenario.py, NOT in this FMU):
-        Y_self_HV += y_s / t²
-        Y_self_LV += y_s
+        Y_self_HV += y_s          (= y_HV)
+        Y_self_LV += y_s · t²    (= y_LV, LV-referred admittance)
 
     Parameters:
         r_hv_ohm    — series resistance referred to HV side  [Ω]  (usually 0)
@@ -119,14 +119,14 @@ class TransformerBranch(Model):
             self.Q_loss_mvar = 0.0
             return True
 
-        y_s = 1.0 / Z                                          # S  (kV/Ω = kA ✓)
+        y_s = 1.0 / Z                                          # S  (y_HV: HV-referred admittance)
         t   = self.rated_u1_kv / self.rated_u2_kv if self.rated_u2_kv != 0.0 else 1.0
 
-        # π current-injection model (off-nominal tap, no phase shift):
-        #   I_in_HV = -(y_s/t²)·V_HV + (y_s/t)·V_LV
-        #   I_in_LV = +(y_s/t)·V_HV  -  y_s·V_LV
-        I_hv = -(y_s / t**2) * V_hv + (y_s / t) * V_lv
-        I_lv =  (y_s / t)    * V_hv -  y_s       * V_lv
+        # Standard physical transformer model in kV/kA units:
+        #   I_in_HV = -y_s·V_HV + t·y_s·V_LV
+        #   I_in_LV = +t·y_s·V_HV - t²·y_s·V_LV
+        I_hv = -y_s * V_hv + (y_s * t) * V_lv
+        I_lv = (y_s * t) * V_hv - (y_s * t**2) * V_lv
 
         self.I_hv_in_re = I_hv.real
         self.I_hv_in_im = I_hv.imag
@@ -134,8 +134,8 @@ class TransformerBranch(Model):
         self.I_lv_in_im = I_lv.imag
 
         # Series current (HV-referred) for loss calculation:
-        #   I_series = (V_HV/t − V_LV) · y_s
-        I_series = (V_hv / t - V_lv) * y_s
+        #   I_series = y_s · (V_HV - t · V_LV)
+        I_series = y_s * (V_hv - t * V_lv)
         I_series_sq = abs(I_series) ** 2
         self.P_loss_mw   = I_series_sq * self.r_hv_ohm
         self.Q_loss_mvar = I_series_sq * self.x_hv_ohm

@@ -1,0 +1,14 @@
+Comparison to StateVariables (topology_export.json)
+Buses with SV values: 14
+Missing keys in both outputs: None
+
+Voltage magnitude MAE (kV):
+ - Branch scenario:      0.000003 kV (RMSE 0.000005)
+ - Transformer scenario:  0.189205 kV (RMSE 0.502051)
+
+Voltage angle MAE (deg):
+ - Branch scenario:      0.000014° (RMSE 0.000024°)
+ - Transformer scenario:  0.980474° (RMSE 1.890805°)
+
+Closer (magnitude): branch
+Closer (angle):     branch
