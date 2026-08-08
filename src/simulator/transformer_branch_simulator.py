@@ -4,6 +4,7 @@ import collections
 from itertools import count
 from fmpy import read_model_description, extract
 from fmpy.fmi2 import FMU2Slave
+from fmpy.fmi3 import FMU3Slave
 
 META = {
     "api_version": "3.0",
@@ -17,6 +18,7 @@ META = {
                 'V_lv_mag_kv', 'V_lv_ang_deg',
                 'I_hv_in_re', 'I_hv_in_im',
                 'I_lv_in_re', 'I_lv_in_im',
+                'I_hv_mag_kA',
                 'P_loss_mw', 'Q_loss_mvar',
             ],
         },
@@ -25,7 +27,7 @@ META = {
 
 _INPUT_ATTRS  = ['V_hv_mag_kv', 'V_hv_ang_deg', 'V_lv_mag_kv', 'V_lv_ang_deg']
 _OUTPUT_ATTRS = ['I_hv_in_re', 'I_hv_in_im', 'I_lv_in_re', 'I_lv_in_im',
-                 'P_loss_mw', 'Q_loss_mvar']
+                 'I_hv_mag_kA', 'P_loss_mw', 'Q_loss_mvar']
 
 
 class TransformerBranch(mosaik_api.Simulator):
@@ -57,7 +59,7 @@ class TransformerBranch(mosaik_api.Simulator):
         for var in self.model_description.modelVariables:
             self.vrs[var.name] = var.valueReference
 
-        print(f'TransformerBranch simulator initialised  (FMI {self.model_description.fmiVersion})')
+        print(f'Initialization of FMU TransformerBranch successful (FMI {self.model_description.fmiVersion})')
         return self.meta
 
     # ── create ────────────────────────────────────────────────────────────────
@@ -72,20 +74,36 @@ class TransformerBranch(mosaik_api.Simulator):
             unique_name = f'{self.instance_name}_{eid}'
             self.unzipdir = extract(self.model_name)
 
-            fmu = FMU2Slave(
-                guid=self.model_description.guid,
-                unzipDirectory=self.unzipdir,
-                modelIdentifier=self.model_description.coSimulation.modelIdentifier,
-                instanceName=unique_name,
-            )
-            fmu.instantiate()
-            fmu.setupExperiment(startTime=self.start_time)
-            fmu.enterInitializationMode()
-            fmu.setReal([self.vrs['r_hv_ohm']],    [r_hv_ohm])
-            fmu.setReal([self.vrs['x_hv_ohm']],    [x_hv_ohm])
-            fmu.setReal([self.vrs['rated_u1_kv']], [rated_u1_kv])
-            fmu.setReal([self.vrs['rated_u2_kv']], [rated_u2_kv])
-            fmu.exitInitializationMode()
+            if self.model_description.fmiVersion == '2.0':
+                fmu = FMU2Slave(
+                    guid=self.model_description.guid,
+                    unzipDirectory=self.unzipdir,
+                    modelIdentifier=self.model_description.coSimulation.modelIdentifier,
+                    instanceName=unique_name,
+                )
+                fmu.instantiate()
+                fmu.setupExperiment(startTime=self.start_time)
+                fmu.enterInitializationMode()
+                fmu.setReal([self.vrs['r_hv_ohm']],    [r_hv_ohm])
+                fmu.setReal([self.vrs['x_hv_ohm']],    [x_hv_ohm])
+                fmu.setReal([self.vrs['rated_u1_kv']], [rated_u1_kv])
+                fmu.setReal([self.vrs['rated_u2_kv']], [rated_u2_kv])
+                fmu.exitInitializationMode()
+
+            elif self.model_description.fmiVersion == '3.0':
+                fmu = FMU3Slave(
+                    guid=self.model_description.guid,
+                    unzipDirectory=self.unzipdir,
+                    modelIdentifier=self.model_description.coSimulation.modelIdentifier,
+                    instanceName=unique_name,
+                )
+                fmu.instantiate()
+                fmu.enterInitializationMode(startTime=self.start_time)
+                fmu.setFloat64([self.vrs['r_hv_ohm']],    [r_hv_ohm])
+                fmu.setFloat64([self.vrs['x_hv_ohm']],    [x_hv_ohm])
+                fmu.setFloat64([self.vrs['rated_u1_kv']], [rated_u1_kv])
+                fmu.setFloat64([self.vrs['rated_u2_kv']], [rated_u2_kv])
+                fmu.exitInitializationMode()
 
             self._entities[eid] = fmu
             self.fmutimes[eid]  = self.start_time * self.sec_per_mt
@@ -99,9 +117,14 @@ class TransformerBranch(mosaik_api.Simulator):
 
         for eid, fmu in self._entities.items():
             entity_inputs = inputs.get(eid, {})
-            for attr in _INPUT_ATTRS:
-                if attr in entity_inputs and entity_inputs[attr]:
-                    fmu.setReal([self.vrs[attr]], [sum(entity_inputs[attr].values())])
+            if self.model_description.fmiVersion == '2.0':
+                for attr in _INPUT_ATTRS:
+                    if attr in entity_inputs and entity_inputs[attr]:
+                        fmu.setReal([self.vrs[attr]], [sum(entity_inputs[attr].values())])
+            elif self.model_description.fmiVersion == '3.0':
+                for attr in _INPUT_ATTRS:
+                    if attr in entity_inputs and entity_inputs[attr]:
+                        fmu.setFloat64([self.vrs[attr]], [sum(entity_inputs[attr].values())])
 
             cp   = self.fmutimes[eid]
             step = target_time - cp
@@ -118,9 +141,23 @@ class TransformerBranch(mosaik_api.Simulator):
                 continue
             fmu = self._entities[eid]
             data[eid] = {}
+            is_fmi3 = self.model_description.fmiVersion == '3.0'
+            get = fmu.getFloat64 if is_fmi3 else fmu.getReal
             for attr in attrs:
-                if attr in _OUTPUT_ATTRS:
-                    data[eid][attr] = fmu.getReal([self.vrs[attr]])[0]
+                if attr == 'I_hv_mag_kA':
+                    re = get([self.vrs['I_hv_in_re']])[0]
+                    im = get([self.vrs['I_hv_in_im']])[0]
+                    data[eid][attr] = math.hypot(re, im)
+                elif attr in _OUTPUT_ATTRS:
+                    data[eid][attr] = get([self.vrs[attr]])[0]
                 elif attr in _INPUT_ATTRS:
-                    data[eid][attr] = fmu.getReal([self.vrs[attr]])[0]
+                    data[eid][attr] = get([self.vrs[attr]])[0]
         return data
+
+    def finalize(self):
+        for fmu in self._entities.values():
+            try:
+                fmu.terminate()
+                fmu.freeInstance()
+            except Exception:
+                pass

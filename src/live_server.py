@@ -532,16 +532,21 @@ function getNodeSeries(nodeId) {
     return { title: label.trim(), subtitle: "Bus Voltage Magnitude & Angle", type: 'substation', series: series };
 
   } else if (ntype === "Transformer") {
-    var bm = label.match(/BRANCH-(\d+)/);
-    if (!bm) return null;
-    var key = "V_branch_" + bm[1] + "_LV";
-    if (!outputData[key]) {
+    var trKey = label.trim().toLowerCase().replace(/-/g, '_').replace(/ /g, '_');
+    var pKey  = "P_loss_"   + trKey + "_mw";
+    var qKey  = "Q_loss_"   + trKey + "_mvar";
+    var iKey  = "I_hv_mag_" + trKey + "_kA";
+    var series = [];
+    if (outputData[pKey]) series.push({ key: pKey, name: "P Loss (MW)",   color: "#FF8C00", yaxis: "y",  mode: "lines+markers" });
+    if (outputData[qKey]) series.push({ key: qKey, name: "Q Loss (Mvar)", color: "#4C9BE8", yaxis: "y2", mode: "lines+markers" });
+    if (outputData[iKey]) series.push({ key: iKey, name: "I HV (kA)",     color: "#9B59B6", yaxis: "y3" });
+    if (!series.length) {
       return { title: label.trim(),
-               subtitle: outputDataLoaded ? 'Key \"' + key + '\" not in output.json' : 'Simulation data loading\u2026',
+               subtitle: outputDataLoaded ? 'Keys not found (tried: ' + pKey + ')' : 'Simulation data loading\u2026',
                series: [] };
     }
-    return { title: label.trim(), subtitle: "LV-side Voltage (kV)", type: 'transformer',
-             series: [{ key: key, name: "V_LV (kV)", color: "#2ECC71", yaxis: "y" }] };
+    return { title: label.trim(), subtitle: "Transformer \u2014 P & Q Loss, HV Current",
+             type: 'transformer', series: series };
 
   } else if (ntype === "Load") {
     return { title: label.trim(), subtitle: "Load \u2014 no time-series output available", series: [] };
@@ -570,7 +575,7 @@ function getNodeSeries(nodeId) {
     var keyPrefix = label.trim().replace(/[^a-zA-Z0-9]/g, '');
     var series = [];
     if (outputData[keyPrefix + "_P_W"])
-      series.push({ key: keyPrefix + "_P_W",       name: "Output Power (W)",   color: "#F39C12", yaxis: "y"  });
+      series.push({ key: keyPrefix + "_P_W",       name: "Output Power (MW)",  color: "#F39C12", yaxis: "y"  });
     if (outputData[keyPrefix + "_P_load_mw"])
       series.push({ key: keyPrefix + "_P_load_mw", name: "P_load (MW)",        color: "#E67E22", yaxis: "y2" });
     if (outputData[keyPrefix + "_V_volt"])
@@ -607,8 +612,8 @@ function getEdgeSeries(edgeId) {
     iKey = "I_from_line_" + tf + "_" + ff + "_kA";
   }
   var series = [];
-  if (outputData[pKey]) series.push({ key: pKey, name: "P Loss (MW)",   color: "#FF8C00", yaxis: "y",  mode: "lines" });
-  if (outputData[qKey]) series.push({ key: qKey, name: "Q Loss (Mvar)", color: "#4C9BE8", yaxis: "y2", mode: "lines" });
+  if (outputData[pKey]) series.push({ key: pKey, name: "P Loss (MW)",   color: "#FF8C00", yaxis: "y",  mode: "lines+markers" });
+  if (outputData[qKey]) series.push({ key: qKey, name: "Q Loss (Mvar)", color: "#4C9BE8", yaxis: "y2", mode: "lines+markers" });
   if (outputData[iKey]) series.push({ key: iKey, name: "I from (kA)",   color: "#9B59B6", yaxis: "y3" });
   if (!series.length) {
     return {
@@ -626,6 +631,15 @@ function getEdgeSeries(edgeId) {
     type:     'edge',
     series:   series
   };
+}
+
+// chart-plotly / chart-plotly-current are reused across every node/edge the
+// user clicks. Plotly.react() keeps whatever x-axis range was last resolved
+// on that div ("sticky" autorange), so switching from a wide-time-span entity
+// to a narrow one leaves the new trace squeezed into a sliver. Force a fresh
+// autorange recompute against the just-rendered data.
+function _forceAutorange(divId) {
+  try { Plotly.relayout(divId, { 'xaxis.autorange': true }); } catch(e) {}
 }
 
 function _buildLayout(traces, hasY2) {
@@ -658,23 +672,16 @@ function _buildLayout(traces, hasY2) {
 
 // ── PV trace builders ────────────────────────────────────────────────────────
 function _buildPVPowerTraces(keyPrefix) {
-  // Upper pane: output power in W (primary y) and P_load in MW (secondary y)
+  // Upper pane: output power in MW
   var traces = [];
   var p_d  = outputData[keyPrefix + "_P_W"];
-  var pl_d = outputData[keyPrefix + "_P_load_mw"];
   function toX(t) { return new Date(SIM_START_DATE.getTime() + t * STEP_DURATION_SEC * 1000).toISOString(); }
   if (p_d) {
     var steps = Object.keys(p_d).map(Number).sort(function(a,b){return a-b;});
-    traces.push({ x: steps.map(toX), y: steps.map(function(t){ return p_d[String(t)]; }),
-      name: "Output Power (W)", type: "scatter", mode: "lines",
-      fill: "tozeroy", fillcolor: "rgba(243,156,18,0.15)",
+    traces.push({ x: steps.map(toX), y: steps.map(function(t){ return p_d[String(t)] / 1e6; }),
+      name: "Output Power (MW)", type: "scatter", mode: "lines+markers",
+      marker: { size: 5, color: "#F39C12" },
       line: { color: "#F39C12", width: 2 }, yaxis: "y" });
-  }
-  if (pl_d) {
-    var steps = Object.keys(pl_d).map(Number).sort(function(a,b){return a-b;});
-    traces.push({ x: steps.map(toX), y: steps.map(function(t){ return Math.abs(pl_d[String(t)]); }),
-      name: "P_load |MW|", type: "scatter", mode: "lines",
-      line: { color: "#E67E22", width: 2, dash: "dot" }, yaxis: "y2" });
   }
   return traces;
 }
@@ -688,13 +695,15 @@ function _buildPVVoltageTraces(keyPrefix) {
   if (v_d) {
     var steps = Object.keys(v_d).map(Number).sort(function(a,b){return a-b;});
     traces.push({ x: steps.map(toX), y: steps.map(function(t){ return v_d[String(t)]; }),
-      name: "Output Voltage (V)", type: "scatter", mode: "lines",
+      name: "Output Voltage (V)", type: "scatter", mode: "lines+markers",
+      marker: { size: 5, color: "#3498DB" },
       line: { color: "#3498DB", width: 2 }, yaxis: "y" });
   }
   if (i_d) {
     var steps = Object.keys(i_d).map(Number).sort(function(a,b){return a-b;});
     traces.push({ x: steps.map(toX), y: steps.map(function(t){ return i_d[String(t)]; }),
-      name: "Output Current (A)", type: "scatter", mode: "lines",
+      name: "Output Current (A)", type: "scatter", mode: "lines+markers",
+      marker: { size: 5, color: "#9B59B6" },
       line: { color: "#9B59B6", width: 2 }, yaxis: "y2" });
   }
   return traces;
@@ -702,22 +711,17 @@ function _buildPVVoltageTraces(keyPrefix) {
 
 // ── Battery trace builders ────────────────────────────────────────────────────
 function _buildBatteryPowerTraces(keyPrefix) {
-  // Upper pane: SOC (%) on primary y-axis, terminal voltage (V) on secondary
+  // Upper pane: SOC (%) — the only independent state signal (V_volt is a pure
+  // linear rescale of SOC in this model, so it carries no extra information).
   var traces = [];
   var soc_d = outputData[keyPrefix + "_SOC"];
-  var v_d   = outputData[keyPrefix + "_V_volt"];
   function toX(t) { return new Date(SIM_START_DATE.getTime() + t * STEP_DURATION_SEC * 1000).toISOString(); }
   if (soc_d) {
     var steps = Object.keys(soc_d).map(Number).sort(function(a,b){return a-b;});
     traces.push({ x: steps.map(toX), y: steps.map(function(t){ return soc_d[String(t)]; }),
-      name: "SOC (%)", type: "scatter", mode: "lines",
+      name: "SOC (%)", type: "scatter", mode: "lines+markers",
+      marker: { size: 5, color: "#2ECC71" },
       line: { color: "#2ECC71", width: 2 }, yaxis: "y" });
-  }
-  if (v_d) {
-    var steps = Object.keys(v_d).map(Number).sort(function(a,b){return a-b;});
-    traces.push({ x: steps.map(toX), y: steps.map(function(t){ return v_d[String(t)]; }),
-      name: "Voltage (V)", type: "scatter", mode: "lines",
-      line: { color: "#F39C12", width: 2 }, yaxis: "y2" });
   }
   return traces;
 }
@@ -726,7 +730,6 @@ function _buildBatteryCurrentTraces(keyPrefix) {
   // Lower pane: charge / discharge power on primary y-axis, current (A) on secondary
   var traces = [];
   var p_d = outputData[keyPrefix + "_P_load_mw"];
-  var i_d = outputData[keyPrefix + "_I_amp"];
   function toX(t) { return new Date(SIM_START_DATE.getTime() + t * STEP_DURATION_SEC * 1000).toISOString(); }
   if (p_d) {
     var steps = Object.keys(p_d).map(Number).sort(function(a,b){return a-b;});
@@ -734,17 +737,13 @@ function _buildBatteryCurrentTraces(keyPrefix) {
     var ys = steps.map(function(t){ return p_d[String(t)]; });
     // Positive = charging, negative = discharging — split into two traces
     traces.push({ x: xs, y: ys.map(function(p){ return Math.max(p, 0); }),
-      name: "Charge (MW)", type: "scatter", mode: "lines", fill: "tozeroy",
+      name: "Charge (MW)", type: "scatter", mode: "lines+markers",
+      marker: { size: 5, color: "#3498DB" },
       line: { color: "#3498DB", width: 2 }, yaxis: "y" });
     traces.push({ x: xs, y: ys.map(function(p){ return Math.abs(Math.min(p, 0)); }),
-      name: "Discharge (MW)", type: "scatter", mode: "lines", fill: "tozeroy",
+      name: "Discharge (MW)", type: "scatter", mode: "lines+markers",
+      marker: { size: 5, color: "#E74C3C" },
       line: { color: "#E74C3C", width: 2, dash: "dot" }, yaxis: "y" });
-  }
-  if (i_d) {
-    var steps = Object.keys(i_d).map(Number).sort(function(a,b){return a-b;});
-    traces.push({ x: steps.map(toX), y: steps.map(function(t){ return i_d[String(t)]; }),
-      name: "Current (A)", type: "scatter", mode: "lines",
-      line: { color: "#9B59B6", width: 2 }, yaxis: "y2" });
   }
   return traces;
 }
@@ -779,13 +778,13 @@ function renderChart(chartData, isPinned) {
     labelPower.innerHTML   = "&#9889; Voltage Magnitude (kV)";
     labelCurrent.innerHTML = "&#126; Voltage Angle (deg)";
   } else if (chartData.type === 'transformer') {
-    labelPower.innerHTML   = "&#9889; LV-side Voltage (kV)";
-    labelCurrent.innerHTML = "&#126; Branch Current &mdash; I from (kA)";
+    labelPower.innerHTML   = "&#9889; Transformer P &amp; Q Loss";
+    labelCurrent.innerHTML = "&#126; HV Branch Current (kA)";
   } else if (chartData.type === 'battery') {
-    labelPower.innerHTML   = "&#128267; Battery: SOC &amp; Terminal Voltage";
-    labelCurrent.innerHTML = "&#9889; Battery: Charge / Discharge Power &amp; Current";
+    labelPower.innerHTML   = "&#128267; Battery: State of Charge (%)";
+    labelCurrent.innerHTML = "&#9889; Battery: Charge / Discharge Power (MW)";
   } else if (chartData.type === 'pv') {
-    labelPower.innerHTML   = "&#9728; PV Array: Output Power (W)";
+    labelPower.innerHTML   = "&#9728; PV Array: Output Power (MW)";
     labelCurrent.innerHTML = "&#9889; PV Array: Output Voltage (V) &amp; Current (A)";
   } else {
     labelPower.innerHTML   = "&#9889; Branch Power &mdash; P &amp; Q Loss";
@@ -802,10 +801,8 @@ function renderChart(chartData, isPinned) {
     var vltTraces = _buildPVVoltageTraces(keyPrefix);
     if (pwrTraces.length) {
       showPowerChart();
-      var hasPwrY2 = pwrTraces.some(function(t){ return t.yaxis === "y2"; });
-      var pvPwrLayout = _buildLayout([{name: "Output Power (W)"}], hasPwrY2);
-      if (hasPwrY2) pvPwrLayout.yaxis2.title.text = "P_load |MW|";
-      try { Plotly.react("chart-plotly", pwrTraces, pvPwrLayout, { responsive: true, displayModeBar: false }); }
+      var pvPwrLayout = _buildLayout([{name: "Output Power (MW)"}], false);
+      try { Plotly.react("chart-plotly", pwrTraces, pvPwrLayout, { responsive: true, displayModeBar: false }); _forceAutorange("chart-plotly"); }
       catch(e) { console.error('[Dashboard] PV power chart failed:', e); }
     } else {
       showPowerPh(outputDataLoaded ? 'No PV power data found' : 'Simulation data loading\u2026');
@@ -815,7 +812,7 @@ function renderChart(chartData, isPinned) {
       var hasVltY2 = vltTraces.some(function(t){ return t.yaxis === "y2"; });
       var pvVltLayout = _buildLayout([{name: "Output Voltage (V)"}], hasVltY2);
       if (hasVltY2) pvVltLayout.yaxis2.title.text = "Output Current (A)";
-      try { Plotly.react("chart-plotly-current", vltTraces, pvVltLayout, { responsive: true, displayModeBar: false }); }
+      try { Plotly.react("chart-plotly-current", vltTraces, pvVltLayout, { responsive: true, displayModeBar: false }); _forceAutorange("chart-plotly-current"); }
       catch(e) { console.error('[Dashboard] PV voltage chart failed:', e); }
     } else {
       showCurrentPh(outputDataLoaded ? 'No PV voltage data found' : 'Simulation data loading\u2026');
@@ -830,23 +827,20 @@ function renderChart(chartData, isPinned) {
     var curTraces = _buildBatteryCurrentTraces(keyPrefix);
     if (pwrTraces.length) {
       showPowerChart();
-      var batPwrLayout = _buildLayout([{name: "SOC (%)"}], true);
-      batPwrLayout.yaxis2.title.text = "Voltage (V)";
+      var batPwrLayout = _buildLayout([{name: "SOC (%)"}], false);
       batPwrLayout.yaxis.zeroline = false;
-      try { Plotly.react("chart-plotly", pwrTraces, batPwrLayout, { responsive: true, displayModeBar: false }); }
-      catch(e) { console.error('[Dashboard] Battery SOC/V chart failed:', e); }
+      try { Plotly.react("chart-plotly", pwrTraces, batPwrLayout, { responsive: true, displayModeBar: false }); _forceAutorange("chart-plotly"); }
+      catch(e) { console.error('[Dashboard] Battery SOC chart failed:', e); }
     } else {
-      showPowerPh(outputDataLoaded ? 'No SOC/voltage data found' : 'Simulation data loading\u2026');
+      showPowerPh(outputDataLoaded ? 'No SOC data found' : 'Simulation data loading\u2026');
     }
     if (curTraces.length) {
       showCurrentChart();
-      var hasBatI = curTraces.some(function(t){ return t.yaxis === "y2"; });
-      var batCurLayout = _buildLayout([{name: "Power (MW)"}], hasBatI);
-      if (hasBatI) batCurLayout.yaxis2.title.text = "Current (A)";
-      try { Plotly.react("chart-plotly-current", curTraces, batCurLayout, { responsive: true, displayModeBar: false }); }
-      catch(e) { console.error('[Dashboard] Battery power/I chart failed:', e); }
+      var batCurLayout = _buildLayout([{name: "Power (MW)"}], false);
+      try { Plotly.react("chart-plotly-current", curTraces, batCurLayout, { responsive: true, displayModeBar: false }); _forceAutorange("chart-plotly-current"); }
+      catch(e) { console.error('[Dashboard] Battery power chart failed:', e); }
     } else {
-      showCurrentPh(outputDataLoaded ? 'No power/current data found' : 'Simulation data loading\u2026');
+      showCurrentPh(outputDataLoaded ? 'No power data found' : 'Simulation data loading\u2026');
     }
     return;
   }
@@ -882,6 +876,7 @@ function renderChart(chartData, isPinned) {
     showPowerChart();
     try {
       Plotly.react("chart-plotly", powerTraces, _buildLayout(powerTraces, hasY2), { responsive: true, displayModeBar: false });
+      _forceAutorange("chart-plotly");
     } catch(e) { console.error('[Dashboard] Plotly.react (power) failed:', e); }
   } else {
     showPowerPh(chartData.series.length
@@ -894,6 +889,7 @@ function renderChart(chartData, isPinned) {
     showCurrentChart();
     try {
       Plotly.react("chart-plotly-current", currentTraces, _buildLayout(currentTraces, false), { responsive: true, displayModeBar: false });
+      _forceAutorange("chart-plotly-current");
     } catch(e) { console.error('[Dashboard] Plotly.react (current) failed:', e); }
   } else {
     showCurrentPh(chartData.series.length

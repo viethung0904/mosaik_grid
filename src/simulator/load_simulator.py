@@ -144,3 +144,11 @@ class Load(mosaik_api.Simulator):
                     elif self.model_description.fmiVersion == '3.0':
                         data[eid][attr] = self._entities[eid].getFloat64([self.vrs[attr]])[0]
         return data
+
+    def finalize(self):
+        for fmu in self._entities.values():
+            try:
+                fmu.terminate()
+                fmu.freeInstance()
+            except Exception:
+                pass

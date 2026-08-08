@@ -265,3 +265,11 @@ class Line(mosaik_api.Simulator):
                         elif attr == 'Q_loss_mvar':
                             data[eid][attr] = self._entities[eid].getFloat64([self.vrs['Q_loss_mvar']])[0]
         return data
+
+    def finalize(self):
+        for fmu in self._entities.values():
+            try:
+                fmu.terminate()
+                fmu.freeInstance()
+            except Exception:
+                pass

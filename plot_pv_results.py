@@ -30,7 +30,7 @@ ADAPTIVE_PATH  = os.path.join(PROJECT_DIR, "output_adaptive.json")
 WHOLE_SYS_PATH = os.path.join(PROJECT_DIR, "output_whole_system.json")
 OUTPUT_HTML    = os.path.join(PROJECT_DIR, "pv_results.html")
 
-RATIO      = 5       # 7200 adaptive ticks / 1440 physical steps
+RATIO      = 3       # 4320 adaptive ticks / 1440 physical steps
 N_STEPS    = 1440
 STEP_SEC   = 60
 time_hours = [i * STEP_SEC / 3600 for i in range(N_STEPS)]

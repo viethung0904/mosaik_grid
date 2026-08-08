@@ -46,6 +46,7 @@ STEP_SIZE_S  = float(os.environ.get('STEP_SIZE_S', 60))    # 60 s per physical s
 N_STEPS      = int(os.environ.get('N_STEPS',      1440))   # 1440 steps = 24 h
 P_CHARGE_MW  = float(os.environ.get('P_CHARGE_MW', 0.030)) # battery setpoint [MW]
 PV_SCALE     = float(os.environ.get('PV_SCALE',    10.0))  # PV multiplier
+N_LIM_GJ     = float(os.environ.get('N_LIM_GJ',    0.0))   # >0: time-shifted GJ sweeps
 
 STOP_TIME    = N_STEPS * STEP_SIZE_S   # 86 400 s
 
@@ -74,6 +75,9 @@ def _get_ST(t_s: float) -> tuple[float, float]:
         else:
             hi = mid - 1
     return _weather[_weather_times[lo]]
+
+# Pass n_lim via env so the embedded Python source can read it without VR remapping
+os.environ['FMU_N_LIM_GJ'] = str(int(N_LIM_GJ))
 
 # ── Prepare FMU ───────────────────────────────────────────────────────────────
 print(f'\nLoading FMU: {os.path.basename(FMU_PATH)}')
@@ -123,6 +127,7 @@ if 'p_charge_mw' in vrs:
     fmu.setReal([vrs['p_charge_mw']], [P_CHARGE_MW])
 if 'pv_scale_factor' in vrs:
     fmu.setReal([vrs['pv_scale_factor']], [PV_SCALE])
+# n_lim is not an FMI param (to avoid VR mismatch); it's read from env by the Python source
 
 # Set initial inputs (t=0 weather)
 S0, T0 = _get_ST(0.0)
@@ -130,7 +135,8 @@ fmu.setReal([vrs['S'], vrs['T']], [S0, T0])
 
 fmu.exitInitializationMode()
 
-print(f'\nParameters set:  p_charge_mw={P_CHARGE_MW} MW,  pv_scale_factor={PV_SCALE}')
+ts_label = f"time-shifted N_LIM={int(N_LIM_GJ)}" if N_LIM_GJ > 0 else "converged (no time shift)"
+print(f'\nParameters set:  p_charge_mw={P_CHARGE_MW} MW,  pv_scale_factor={PV_SCALE},  GJ={ts_label}')
 print(f'Initial weather: S={S0:.1f} W/m²,  T={T0:.2f} K')
 
 # ── Simulation loop ────────────────────────────────────────────────────────────
@@ -186,21 +192,21 @@ print(f'  Keys: {len(results)} output variables × {N_STEPS} steps')
 
 # ── Quick validation: steady-state voltages vs CIM reference ─────────────────
 print('\n=== Steady-state bus voltages (step 0, base load, no PV/sun) ===')
-CIM_REF = {                        # sv_voltage_kv from Neo4j (for reference)
-    'V_BUS1_69_mag_kv':   73.14,
-    'V_BUS2_69_mag_kv':   72.105,
-    'V_BUS3_69_mag_kv':   69.690,
-    'V_BUS4_69_mag_kv':   70.869,
-    'V_BUS5_69_mag_kv':   71.338,
-    'V_BUS6_138_mag_kv':  14.766,
-    'V_BUS7_138_mag_kv':  14.460,
-    'V_BUS8_18_mag_kv':   19.561,
-    'V_BUS9_138_mag_kv':  14.238,
-    'V_BUS10_138_mag_kv': 14.231,
-    'V_BUS11_138_mag_kv': 14.449,
-    'V_BUS12_138_mag_kv': 14.520,
-    'V_BUS13_138_mag_kv': 14.451,
-    'V_BUS14_138_mag_kv': 14.068,
+CIM_REF = {                        # SvVoltage from IEEE_14_feeder_NEPLAN_CIM.xml
+    'V_BUS1_69_mag_kv':   73.14000,
+    'V_BUS2_69_mag_kv':   72.10500,
+    'V_BUS3_69_mag_kv':   69.69000,
+    'V_BUS4_69_mag_kv':   69.80303,
+    'V_BUS5_69_mag_kv':   70.08970,
+    'V_BUS6_138_mag_kv':  14.76600,
+    'V_BUS7_138_mag_kv':  14.45973,
+    'V_BUS8_18_mag_kv':   19.56076,
+    'V_BUS9_138_mag_kv':  14.23756,
+    'V_BUS10_138_mag_kv': 14.22641,
+    'V_BUS11_138_mag_kv': 14.44355,
+    'V_BUS12_138_mag_kv': 14.53620,
+    'V_BUS13_138_mag_kv': 14.44600,
+    'V_BUS14_138_mag_kv': 14.07640,
 }
 print(f'{"Variable":25} {"FMU [kV]":>10} {"CIM [kV]":>10} {"Err %":>8}')
 print('-' * 58)

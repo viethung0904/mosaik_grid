@@ -64,6 +64,8 @@ import os
 
 import numpy as np
 from dotenv import load_dotenv
+from fmpy import read_model_description, extract as fmpy_extract
+from fmpy.fmi3 import FMU3Slave
 from neo4j import GraphDatabase
 
 from component_model.model import Model
@@ -137,6 +139,7 @@ class IEEE_14_NR_PV_Battery_Unified(Model):
         "Bat_V_volt":          ("Battery terminal voltage [V]",            "output","continuous","calculated"),
         "Bat_I_amp":           ("Battery terminal current [A] (>0=charge)","output","continuous","calculated"),
         "Bat_P_mw":            ("Battery grid power [MW] (>0=charge draw)","output","continuous","calculated"),
+        "Bat_Q_mvar":          ("Battery reactive power [MVAr] (CIM constantPowerFactor)","output","continuous","calculated"),
         # ── PV outputs ────────────────────────────────────────────────────────
         "PV_P_W":              ("PV array power [W]",                      "output","continuous","calculated"),
         "PV_V_volt":           ("PV array voltage [V]",                    "output","continuous","calculated"),
@@ -204,6 +207,7 @@ class IEEE_14_NR_PV_Battery_Unified(Model):
         Bat_V_volt: float = 500.0,
         Bat_I_amp: float = 0.0,
         Bat_P_mw: float = 0.0,
+        Bat_Q_mvar: float = 0.0,
         # ── FMI PV outputs ────────────────────────────────────────────────────
         PV_P_W: float = 0.0,
         PV_V_volt: float = 0.0,
@@ -221,6 +225,8 @@ class IEEE_14_NR_PV_Battery_Unified(Model):
         self._T                   = self._interface("T",                   T)
         self._p_charge_mw         = self._interface("p_charge_mw",         p_charge_mw)
         self._pv_scale_factor     = self._interface("pv_scale_factor",     pv_scale_factor)
+        # Read time-shifted GJ sweeps from env-var (not FMI param, to avoid VR mismatch)
+        self.n_lim = float(os.environ.get("FMU_N_LIM_GJ", "0"))
 
         self._V_BUS1_69_mag_kv    = self._interface("V_BUS1_69_mag_kv",    V_BUS1_69_mag_kv)
         self._V_BUS1_69_ang_deg   = self._interface("V_BUS1_69_ang_deg",   V_BUS1_69_ang_deg)
@@ -255,6 +261,7 @@ class IEEE_14_NR_PV_Battery_Unified(Model):
         self._Bat_V_volt          = self._interface("Bat_V_volt",          Bat_V_volt)
         self._Bat_I_amp           = self._interface("Bat_I_amp",           Bat_I_amp)
         self._Bat_P_mw            = self._interface("Bat_P_mw",            Bat_P_mw)
+        self._Bat_Q_mvar          = self._interface("Bat_Q_mvar",          Bat_Q_mvar)
 
         self._PV_P_W              = self._interface("PV_P_W",              PV_P_W)
         self._PV_V_volt           = self._interface("PV_V_volt",           PV_V_volt)
@@ -280,6 +287,7 @@ class IEEE_14_NR_PV_Battery_Unified(Model):
         # database connection (the builder only needs the FMI variable declarations).
         self._network_loaded: bool = False
         self._Vc:             np.ndarray | None = None
+        self._Vc_prev:        np.ndarray | None = None  # for time-shifted mode
         self._Y:              np.ndarray | None = None
         self._bus_names:      list = []
         self._bus_idx:        dict = {}
@@ -297,6 +305,10 @@ class IEEE_14_NR_PV_Battery_Unified(Model):
         self._bus_output_map:        dict = {}
         self._pv_bus_idx:     int | None = None
         self._bat_bus_idx:    int | None = None
+        # Constant power factor from CIM PowerElectronicsConnection.controlMode
+        # (P=30kW, Q=40kVAr → PF=0.6 for the default battery unit). 1.0 = unity
+        # (no reactive contribution) when not constantPowerFactor or data missing.
+        self._bat_pf:         float = 1.0
         self._all_slack_set:  set = set()
         self._pq_set:         set = set()
         self._pv_reg_set:     set = set()
@@ -336,12 +348,12 @@ class IEEE_14_NR_PV_Battery_Unified(Model):
         #   Capacity from SOC rate at 30 kW: 0.5 kWh / 0.0222% = 2252 kWh → 6256 Ah
         # Sign convention matches Simulink FMU: I < 0 = charging, I > 0 = discharging.
         self._bat_soc_pct   = 90.0         # %   initial SOC — matches Battery_Simulink_fmi3.fmu
-        self._bat_cap_ah    = 12530.0      # Ah  usable capacity (calibrated vs Simulink FMU:
-                                           #     observed ΔSOC 0.011%/step at 83 A, 60 s →
-                                           #     C = 83.3 × (60/3600) / 0.000111 = 12 530 Ah)
+        self._bat_cap_ah    = 12500.0      # Ah  usable capacity (exact: Simulink FMU inferred
+                                           #     from ΔSOC 0.011111%/step at 83.3333 A, 60 s →
+                                           #     C = 83.3333 × (60/3600) / 0.00011111 = 12 500 Ah)
         self._bat_V_oc_min  = 0.0          # V   OCV at SOC = 0%  (calibrated)
         self._bat_V_oc_max  = 400.0        # V   OCV at SOC = 100% (calibrated)
-        self._bat_R_int     = 0.000533     # Ω   internal resistance (calibrated)
+        self._bat_R_int     = 0.0           # Ω   no internal resistance (matches Battery FMU)
 
         # Initialise FMI outputs from initial state
         self._sync_outputs()
@@ -449,6 +461,10 @@ class IEEE_14_NR_PV_Battery_Unified(Model):
                     'MATCH (s:Substation)-[:CONNECT_TO]->(d:Battery) '
                     'RETURN s.name AS name ORDER BY s.name LIMIT 1'
                 ).single()
+                bat_pf_rec = sess.run(
+                    'MATCH (b:Battery) RETURN b.p AS p, b.q AS q, b.control_mode AS mode '
+                    'ORDER BY b.name LIMIT 1'
+                ).single()
         finally:
             driver.close()
 
@@ -459,11 +475,9 @@ class IEEE_14_NR_PV_Battery_Unified(Model):
 
         slack_primary    = {nm for nm, s in subs.items() if s['is_slack']}
         sync_machines    = {nm for nm, s in subs.items() if s['is_sync']}
-        lv_slack         = {
-            e['lv_sub'] for e in tr_edge_records
-            if e['lv_sub'] not in slack_primary
-            and not subs.get(e['lv_sub'], {}).get('is_sync', False)
-        }
+        # Match mosaik scenario: LV transformer secondary buses are free PQ nodes,
+        # not forced as slack. scenario_adaptive.py sets _lv_slack_subs = set().
+        lv_slack         = set()
         all_slack        = slack_primary | lv_slack
 
         pv_buses_nr      = sorted([nm for nm in sync_machines if nm not in all_slack])
@@ -527,13 +541,15 @@ class IEEE_14_NR_PV_Battery_Unified(Model):
             tap  = (u1 / u2) if u2 != 0.0 else 1.0
             y_s  = (1.0 / Z_hv) if abs(Z_hv) > 1e-15 else complex(1e6, 0)
             hi, li = self._bus_idx[hv_nm], self._bus_idx[lv_nm]
-            Y[hi, hi] += y_s
-            Y[li, li] += y_s * tap ** 2
-            Y[hi, li] -= y_s * tap
-            Y[li, hi] -= y_s * tap
-            # Detect inverted HV/LV storage (Neo4j CONNECT_TO sides swapped).
-            # scenario_adaptive.py corrects this with a v_nom check; replicate here.
             inverted = subs[hv_nm]['v_nom'] < subs[lv_nm]['v_nom']
+            # Match scenario_adaptive.py: for inverted transformers (Neo4j HV/LV swapped),
+            # swap Y-bus diagonal indices so Y_self is applied to the correct bus.
+            # This ensures the GJ fixed point matches the co-simulation's SubstationNR.
+            _yhi, _yli = (li, hi) if inverted else (hi, li)
+            Y[_yhi, _yhi] += y_s
+            Y[_yli, _yli] += y_s * tap ** 2
+            Y[_yhi, _yli] -= y_s * tap
+            Y[_yli, _yhi] -= y_s * tap
             _tv_key = tr_nm.lower().replace('-', '_')
             self._trafos.append({
                 'hi': hi, 'li': li,
@@ -571,6 +587,17 @@ class IEEE_14_NR_PV_Battery_Unified(Model):
         print(f'  [Unified FMU] PV bus:  {_pv_nm}  (idx={self._pv_bus_idx})')
         print(f'  [Unified FMU] Bat bus: {_bat_nm}  (idx={self._bat_bus_idx})')
 
+        # Constant power factor (CIM PowerElectronicsConnection.controlMode) —
+        # mirrors _fetch_battery_power_factor() in scenario_adaptive.py.
+        if (bat_pf_rec and bat_pf_rec['mode'] == 'constantPowerFactor'
+                and bat_pf_rec['p'] is not None and bat_pf_rec['q'] is not None):
+            _bp, _bq = bat_pf_rec['p'], bat_pf_rec['q']
+            _bs = (_bp ** 2 + _bq ** 2) ** 0.5
+            self._bat_pf = _bp / _bs if _bs > 1e-9 else 1.0
+        else:
+            self._bat_pf = 1.0
+        print(f'  [Unified FMU] Battery PF: {self._bat_pf:.4f}')
+
         # ── Sets for fast per-bus type lookup ────────────────────────────────
         self._all_slack_set = all_slack           # set of slack bus names
         self._pq_set        = set(pq_buses_nr)    # set of PQ bus names
@@ -590,7 +617,8 @@ class IEEE_14_NR_PV_Battery_Unified(Model):
         )
 
         self._network_loaded = True
-        print(f'  [Unified FMU] Network loaded: {n_bus} buses, {len(self._lines)} lines')
+        print(f'  [Unified FMU] Network loaded: {n_bus} buses, {len(self._lines)} lines, '
+              f'{len(self._sl_idx)} slack, {len(self._pv_idx_nr)} PV, {len(self._pq_idx)} PQ')
 
     def setup_experiment(self, start_time: float, stop_time: float = None,
                          tolerance: float = None):
@@ -643,7 +671,7 @@ class IEEE_14_NR_PV_Battery_Unified(Model):
         pv_P_grid_mw = -pv_P_arr * self.pv_scale_factor / 1e6  # MW (<0 = injection)
 
         # ── B. Battery (Thevenin SOC dynamics) ────────────────────────────────
-        bat_P_mw, bat_soc, bat_V, bat_I = self._battery_step(
+        bat_P_mw, bat_soc, bat_V, bat_I, bat_Q_mvar = self._battery_step(
             self.p_charge_mw, step_size
         )
 
@@ -656,24 +684,36 @@ class IEEE_14_NR_PV_Battery_Unified(Model):
         # Battery: charging → extra load → negative net injection
         if self._bat_bus_idx is not None:
             P_inj[self._bat_bus_idx] -= bat_P_mw       # bat_P_mw > 0 charging → P_inj decreases
+            Q_inj[self._bat_bus_idx] -= bat_Q_mvar     # CIM constantPowerFactor
 
         # ── D. SubstationNR-style Gauss-Jacobi outer loop ──────────────────────
-        # N_NR outer GJ sweeps, each solving a per-bus rectangular NR to convergence.
-        # Mirrors the mosaik co-simulation exactly:
+        # Adaptive outer sweep count: warm starts (previous step close to solution)
+        # exit in 2–3 sweeps via the GJ_TOL early-exit; cold starts run up to
+        # GJ_MAX sweeps.  Mirrors the mosaik co-simulation structure:
         #   • SubstationNR per-bus local NR  ↔  this inner rectangular solve
-        #   • N_LIM=5 mosaik GJ ticks        ↔  N_NR=5 outer sweeps here
+        #   • N_LIM mosaik GJ ticks          ↔  adaptive outer loop here
         #   • omega_relax=0.5 damping        ↔  omega below
         #   • time_shifted line FMU outputs  ↔  I_nbr uses Vc from previous sweep
         NR_MAX_ITER = 50
         NR_TOL      = 1e-10   # [kA] convergence tolerance on |f(V)|
         omega       = 0.5     # outer Gauss-Jacobi damping (same as Substation FMU)
+        GJ_MAX      = 30      # cap: enough for cold start (warm start exits early)
+        GJ_TOL      = 1e-6    # [kV] outer convergence: stop when max |ΔV| < this
+
+        # Time-shifted mode: run exactly n_lim GJ sweeps (no convergence early-exit).
+        # Warm-start from self._Vc (previous step's solution) acts as the time-shifted
+        # boundary for the first sweep — equivalent to mosaik time_shifted=True.
+        # Standard GJ (boundary updates each sweep) is used throughout.
+        n_lim_fixed = int(self.n_lim)
+        time_shifted = n_lim_fixed > 0
+        _gj_max = n_lim_fixed if time_shifted else GJ_MAX
 
         Vc = self._Vc.copy()
         # Enforce slack voltages exactly before first sweep
         for si in self._sl_idx:
             Vc[si] = self._V_slack[si]
 
-        for _outer in range(N_NR):
+        for _outer in range(_gj_max):
             Vc_next = Vc.copy()
 
             for nm in self._bus_names:
@@ -754,7 +794,10 @@ class IEEE_14_NR_PV_Battery_Unified(Model):
             for si in self._sl_idx:
                 Vc_next[si] = self._V_slack[si]
 
+            max_dV = float(np.max(np.abs(Vc_next - Vc)))
             Vc = Vc_next
+            if not time_shifted and max_dV < GJ_TOL:
+                break
 
         self._Vc = Vc   # store for warm-start next step
 
@@ -767,6 +810,7 @@ class IEEE_14_NR_PV_Battery_Unified(Model):
         self.Bat_V_volt        = bat_V
         self.Bat_I_amp         = bat_I
         self.Bat_P_mw          = bat_P_mw
+        self.Bat_Q_mvar        = bat_Q_mvar
         self.PV_P_W            = pv_P_arr
         self.PV_V_volt         = pv_V_arr if pv_P_arr > 1.0 else 0.0
         self.PV_I_amp          = pv_I_arr
@@ -854,23 +898,23 @@ class IEEE_14_NR_PV_Battery_Unified(Model):
     # ── Battery sub-model ─────────────────────────────────────────────────────
 
     def _battery_step(self, p_charge_setpoint_mw: float, dt_s: float
-                       ) -> tuple[float, float, float, float]:
+                       ) -> tuple[float, float, float, float, float]:
         """Thevenin battery — SOC ODE + terminal voltage.
 
-        Returns (P_grid_mw, SOC_pct, V_terminal, I_bat).
+        Returns (P_grid_mw, SOC_pct, V_terminal, I_bat, Q_grid_mvar).
 
         Sign conventions (match Battery_Simulink_fmi3.fmu):
             P_grid_mw > 0   →  charging   (drawing power from grid)
             P_grid_mw < 0   →  discharging (injecting power into grid)
             I_bat < 0       →  charging current  (Simulink convention)
             I_bat > 0       →  discharging current
+            Q_grid_mvar     →  same sign convention as P_grid_mw, scaled by the
+                                CIM constant power factor (self._bat_pf): Q = P·tan(acos(PF))
 
-        Thevenin model (calibrated to Simulink FMU):
+        Ideal voltage source (no internal resistance, matches Battery FMU):
             V_oc = V_oc_min + (SOC/100) × (V_oc_max − V_oc_min)
-            V_terminal = V_oc + R_int × I_internal
-              where I_internal > 0 for charging (current into + terminal)
-              → charging raises V_terminal above V_oc
-              → discharging lowers V_terminal below V_oc
+            V_terminal = V_oc
+            I_internal = P / V_oc
 
         SOC ODE (forward Euler, I_internal > 0 = charging → SOC rises):
             dSOC_pct = (I_internal / C_ah) × (dt_s / 3600) × 100
@@ -879,30 +923,32 @@ class IEEE_14_NR_PV_Battery_Unified(Model):
 
         # BMS limits
         if soc_frac >= 1.0 and p_charge_setpoint_mw > 0:
-            return 0.0, 100.0, self._bat_V_oc_max, 0.0
+            return 0.0, 100.0, self._bat_V_oc_max, 0.0, 0.0
         if soc_frac <= 0.0 and p_charge_setpoint_mw < 0:
-            return 0.0, 0.0, self._bat_V_oc_min, 0.0
+            return 0.0, 0.0, self._bat_V_oc_min, 0.0, 0.0
 
         V_oc = self._bat_V_oc_min + soc_frac * (self._bat_V_oc_max - self._bat_V_oc_min)
 
-        # I_internal > 0 = charging (current into + terminal)
-        # p_charge_setpoint_mw > 0 → P_bat_W > 0 → I_internal > 0
-        P_bat_W  = p_charge_setpoint_mw * 1e6
-        I_int    = P_bat_W / V_oc if abs(V_oc) > 1e-3 else 0.0
-        # Charging: V_terminal = V_oc + R_int * I_int  (terminal rises above OCV)
-        V_terminal = V_oc + self._bat_R_int * I_int
-        I_int_ref  = P_bat_W / V_terminal if abs(V_terminal) > 1e-3 else I_int
-        V_terminal = V_oc + self._bat_R_int * I_int_ref
+        P_bat_W   = p_charge_setpoint_mw * 1e6
+        I_int_ref = P_bat_W / V_oc if abs(V_oc) > 1e-3 else 0.0
+        V_terminal = V_oc
 
         # SOC update
         delta_soc_pct = (I_int_ref / self._bat_cap_ah) * (dt_s / 3600.0) * 100.0
         self._bat_soc_pct = float(np.clip(self._bat_soc_pct + delta_soc_pct, 0.0, 100.0))
 
+        # Constant power factor: Q = P·tan(acos(PF)), same sign as P (PF=1 → Q=0)
+        if self._bat_pf < 1.0 - 1e-9:
+            Q_grid_mvar = p_charge_setpoint_mw * math.tan(math.acos(self._bat_pf))
+        else:
+            Q_grid_mvar = 0.0
+
         # Output I uses Simulink sign: negative = charging
         return (p_charge_setpoint_mw,
                 self._bat_soc_pct,
                 float(V_terminal),
-                -float(I_int_ref))
+                -float(I_int_ref),
+                float(Q_grid_mvar))
 
     # ── NR Jacobian ───────────────────────────────────────────────────────────
 
@@ -1044,6 +1090,7 @@ class IEEE_14_NR_PV_Battery_Unified(Model):
         self.Bat_V_volt = V_oc
         self.Bat_I_amp  = 0.0
         self.Bat_P_mw   = 0.0
+        self.Bat_Q_mvar = 0.0
         self.PV_P_W     = 0.0
         self.PV_V_volt  = 0.0
         self.PV_I_amp   = 0.0
