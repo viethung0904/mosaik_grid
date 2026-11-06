@@ -11,7 +11,7 @@ META = {
     'models': {
         'Battery': {
             'public': True,
-            'params': ['p_charge_mw', 'power_factor'],
+            'params': ['p_charge_mw', 'power_factor', 'capacity_ah'],
             'attrs': ['P_load_mw', 'Q_load_mvar', 'SOC', 'V_volt', 'I_amp'],
         },
     },
@@ -61,7 +61,7 @@ class Battery(mosaik_api.Simulator):
 
         return self.meta
 
-    def create(self, num, model, p_charge_mw=0.0, power_factor=1.0):
+    def create(self, num, model, p_charge_mw=0.0, power_factor=1.0, capacity_ah=0.0):
         counter = self.eid_counters.setdefault(model, count())
         entities = []
 
@@ -88,6 +88,11 @@ class Battery(mosaik_api.Simulator):
                 # stored and applied before the first doStep in step().
                 fmu.setReal([self.vrs['P_charge']], [0.0])
                 fmu.setReal([self.vrs['P_load']],   [0.0])
+                # Energy capacity [A.h] from CIM (ratedE kWh → A.h), fed in at
+                # initialization. Constant, so set once here; capacity_ah = 0
+                # lets the FMU fall back to its built-in design default.
+                if 'Capacity' in self.vrs:
+                    fmu.setReal([self.vrs['Capacity']], [capacity_ah])
                 fmu.exitInitializationMode()
 
                 self._p_charge_w[eid] = p_charge_mw * 1e6
@@ -110,6 +115,11 @@ class Battery(mosaik_api.Simulator):
                 # Same reason as FMI 2.0 above.
                 fmu.setFloat64([self.vrs['P_charge']], [0.0])
                 fmu.setFloat64([self.vrs['P_load']],   [0.0])
+                # Energy capacity [A.h] from CIM (ratedE kWh → A.h), fed in at
+                # initialization. Constant, so set once here; capacity_ah = 0
+                # lets the FMU fall back to its built-in design default.
+                if 'Capacity' in self.vrs:
+                    fmu.setFloat64([self.vrs['Capacity']], [capacity_ah])
                 fmu.exitInitializationMode()
 
                 self._p_charge_w[eid] = p_charge_mw * 1e6

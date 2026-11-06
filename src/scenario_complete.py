@@ -1240,6 +1240,29 @@ def _fetch_battery_power_factor() -> float:
         driver.close()
 
 
+def _fetch_battery_capacity() -> float:
+    """
+    Read the CIM energy capacity for the first Battery node and convert it to
+    the ampere-hours the Simulink battery FMU expects:
+        capacity[A.h] = ratedE[kWh] * 1000 / ratedU[V]
+    (BatteryUnit.ratedE / PowerElectronicsConnection.ratedU, both from CIM.)
+    Returns 0.0 when the data is absent, which tells the FMU to fall back to
+    its built-in design capacity.
+    """
+    driver, session = _neo4j_session()
+    try:
+        rec = session.run(
+            'MATCH (b:Battery) RETURN b.rated_e AS rated_e, b.rated_u AS rated_u '
+            'ORDER BY b.name LIMIT 1'
+        ).single()
+        if not rec or rec['rated_e'] is None or not rec['rated_u']:
+            return 0.0
+        return rec['rated_e'] * 1000.0 / rec['rated_u']
+    finally:
+        session.close()
+        driver.close()
+
+
 def _fetch_scheme_name() -> str:
     """Read the scheme name recorded by add_data_slack_detection.py (GridMetadata node)."""
     driver, session = _neo4j_session()
@@ -1465,6 +1488,8 @@ def run_simulation():
     _BATTERY_P_CHARGE = 0.030   # Charge setpoint [MW] (positive = charge, 30 kW)
     # CIM PowerElectronicsConnection.controlMode=constantPowerFactor: P=30kW, Q=40kVAr → PF=0.6
     _BATTERY_PF       = _fetch_battery_power_factor() if _HAS_BATTERY else 1.0
+    # CIM BatteryUnit.ratedE [kWh] → A.h, fed to the FMU at init (0 = FMU default)
+    _BATTERY_CAPACITY_AH = _fetch_battery_capacity() if _HAS_BATTERY else 0.0
     _PV_BUS           = _pv_buses[0] if _HAS_PV else ''
     _PV_CSV           = os.path.join(PROJECT_DIR, 'input_data.csv')
     _PV_SCALE_FACTOR  = 10.0   # Multiply FMU output: 10× ≈ 3.84 MW peak
@@ -1558,7 +1583,10 @@ def run_simulation():
         )
 
     N_LIM = 5  # Number of Gauss-Jacobi outer iterations per physical step (60 s)
-    STOP  = 1440 * N_LIM   # 1440 time steps of 1 minutes in real world = 24 h
+    # Plain IEEE 14 only needs to confirm NR convergence (1 h); the PV/Battery
+    # variants need a full day so the PV irradiance profile plays out (24 h).
+    _PHYS_STEPS = 60 if _FLAT_START else 1440
+    STOP = _PHYS_STEPS * N_LIM   # 300 for plain IEEE 14, 7200 for PV/Battery variants
 
     # ── Simulator config (conditional on detected elements) ───────────────────────
     sim_config = {
@@ -1669,9 +1697,12 @@ def run_simulation():
         battery_sim = world.start('Battery',
             fmu_filename=os.path.join(FMU_DIR, 'Battery_Simulink_fmi3.fmu'),
             instance_name='Battery', step_size=N_LIM)
-        _battery_e = battery_sim.Battery.create(1, p_charge_mw=_BATTERY_P_CHARGE, power_factor=_BATTERY_PF)[0]
+        _battery_e = battery_sim.Battery.create(1, p_charge_mw=_BATTERY_P_CHARGE,
+                                                power_factor=_BATTERY_PF,
+                                                capacity_ah=_BATTERY_CAPACITY_AH)[0]
         _entity_map['battery_1'] = _battery_e
-        print(f'  Battery-1 at {_BATTERY_BUS} (p_charge={_BATTERY_P_CHARGE} MW, PF={_BATTERY_PF:.3f})')
+        print(f'  Battery-1 at {_BATTERY_BUS} (p_charge={_BATTERY_P_CHARGE} MW, '
+              f'PF={_BATTERY_PF:.3f}, capacity={_BATTERY_CAPACITY_AH:.0f} A·h)')
 
     # ── PV + CSV weather (conditional) ────────────────────────────────────────────
     if _HAS_PV:
